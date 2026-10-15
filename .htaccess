@@ -1,0 +1,6 @@
+# HTML und PHP nicht zwischenspeichern, damit Änderungen sofort sichtbar sind.
+<IfModule mod_headers.c>
+  <FilesMatch "\.(html|php)$">
+    Header set Cache-Control "no-cache, must-revalidate"
+  </FilesMatch>
+</IfModule>
