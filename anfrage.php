@@ -150,7 +150,7 @@ $header = [
     'MIME-Version: 1.0',
     'Content-Type: text/plain; charset=UTF-8',
     'Content-Transfer-Encoding: 8bit',
-    'From: =?UTF-8?B?' . base64_encode('VeroClear Website') . "?= <$absender>",
+    'From: =?UTF-8?B?' . base64_encode('VeroClear') . "?= <$absender>",
 ];
 if ($email !== '') $header[] = "Reply-To: $email";
 
