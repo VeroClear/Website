@@ -1,0 +1,10 @@
+{
+  "name": "VeroClear App",
+  "short_name": "VeroClear",
+  "start_url": "/app/",
+  "scope": "/app/",
+  "display": "standalone",
+  "background_color": "#F3F6F4",
+  "theme_color": "#0A1D19",
+  "icons": [{ "src": "/assets/apple-touch-icon.png", "sizes": "180x180", "type": "image/png" }]
+}

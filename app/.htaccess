@@ -1,0 +1,6 @@
+# VeroClear-App: nichts zwischenspeichern, nicht indexieren.
+<IfModule mod_headers.c>
+  Header set Cache-Control "no-store"
+  Header set X-Robots-Tag "noindex, nofollow"
+  Header set X-Frame-Options "DENY"
+</IfModule>

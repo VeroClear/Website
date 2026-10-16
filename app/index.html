@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex,nofollow">
+<meta name="theme-color" content="#0A1D19">
+<title>VeroClear App</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/png" href="../assets/favicon.png">
+<link rel="apple-touch-icon" href="../assets/apple-touch-icon.png">
+<style>
+  :root { --ink:#0A1D19; --ink2:#0F2A25; --accent:#0E8A68; --leaf:#3BDF9C; --bg:#F3F6F4; --card:#fff; --line:#DDE5E1; --muted:#5B6B66; --danger:#B42318; }
+  * { box-sizing:border-box; }
+  body { margin:0; font:16px/1.45 -apple-system,BlinkMacSystemFont,"Helvetica Neue",Arial,sans-serif; background:var(--bg); color:var(--ink); }
+  header { position:sticky; top:0; z-index:10; display:flex; align-items:center; gap:12px; padding:12px 16px calc(12px) ; padding-top:calc(12px + env(safe-area-inset-top)); background:var(--ink); color:#fff; }
+  header img { height:30px; }
+  header b { font-size:18px; letter-spacing:.02em; }
+  header button { margin-left:auto; background:transparent; color:#fff; border:1px solid rgba(255,255,255,.4); border-radius:6px; padding:6px 10px; font-size:14px; }
+  main { max-width:760px; margin:0 auto; padding:16px 16px 120px; }
+  h1 { font-size:24px; margin:8px 0 16px; }
+  h2 { font-size:17px; margin:0 0 10px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:16px; margin-bottom:14px; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:10px; }
+  label { display:block; font-size:13px; color:var(--muted); font-weight:600; }
+  input, select, textarea { width:100%; margin-top:4px; padding:11px 12px; font:inherit; border:1px solid var(--line); border-radius:8px; background:#fff; color:var(--ink); }
+  textarea { min-height:80px; }
+  .chk { display:flex; align-items:center; gap:10px; padding:8px 0; font-size:16px; color:var(--ink); font-weight:500; }
+  .chk input { width:22px; height:22px; margin:0; }
+  .btn { display:inline-flex; align-items:center; justify-content:center; gap:8px; width:100%; min-height:50px; padding:12px 16px; border:0; border-radius:8px; background:var(--accent); color:#fff; font:600 16px inherit; font-family:inherit; cursor:pointer; text-decoration:none; }
+  .btn.sec { background:#fff; color:var(--ink); border:2px solid var(--ink); }
+  .btn.small { width:auto; min-height:38px; padding:6px 12px; font-size:14px; }
+  .tiles { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+  .tile { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:20px 16px; text-align:left; font:600 17px inherit; font-family:inherit; color:var(--ink); cursor:pointer; min-height:110px; }
+  .tile small { display:block; font-weight:400; color:var(--muted); font-size:13px; margin-top:6px; }
+  .sum { position:fixed; left:0; right:0; bottom:0; background:var(--ink); color:#fff; padding:12px 16px calc(12px + env(safe-area-inset-bottom)); display:flex; align-items:center; gap:12px; }
+  .sum .preis { font:800 24px ui-monospace,Menlo,monospace; }
+  .sum .btn { width:auto; margin-left:auto; }
+  .rows .row { display:grid; grid-template-columns:1fr 110px 40px; gap:8px; align-items:end; margin-bottom:8px; }
+  .x { height:44px; border:1px solid var(--line); background:#fff; border-radius:8px; font-size:18px; }
+  .fotos { display:grid; grid-template-columns:repeat(auto-fill,minmax(90px,1fr)); gap:8px; margin-top:10px; }
+  .fotos div { position:relative; } .fotos img { width:100%; aspect-ratio:1; object-fit:cover; border-radius:6px; }
+  .fotos button { position:absolute; top:4px; right:4px; border:0; border-radius:50%; width:26px; height:26px; background:rgba(0,0,0,.6); color:#fff; }
+  .sig { width:100%; height:170px; border:2px dashed var(--line); border-radius:8px; background:#fff; touch-action:none; display:block; }
+  .note { font-size:13px; color:var(--muted); }
+  .err { color:var(--danger); font-weight:600; margin-top:8px; }
+  .ok { color:var(--accent); font-weight:600; }
+  table.calc { width:100%; border-collapse:collapse; font-size:15px; } table.calc td { padding:6px 0; border-bottom:1px solid var(--line); } table.calc td:last-child { text-align:right; font-family:ui-monospace,Menlo,monospace; }
+  .list a { display:block; padding:12px 0; border-bottom:1px solid var(--line); color:var(--ink); text-decoration:none; }
+  .list a span { color:var(--muted); font-size:13px; display:block; }
+  .back { background:none; border:0; color:var(--accent); font:600 15px inherit; font-family:inherit; padding:0; margin-bottom:6px; cursor:pointer; }
+</style>
+</head>
+<body>
+<header><img src="../assets/logo-symbol.png" alt=""><b>VeroClear</b><button id="logout" hidden>Abmelden</button></header>
+<main id="main"><p class="note">Lädt …</p></main>
+<script src="vendor/jspdf.umd.min.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
