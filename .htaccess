@@ -4,3 +4,10 @@
     Header set Cache-Control "no-cache, must-revalidate"
   </FilesMatch>
 </IfModule>
+
+# www.veroclear.de dauerhaft auf veroclear.de umleiten (eine Adresse für Google).
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+  RewriteCond %{HTTP_HOST} ^www\.veroclear\.de$ [NC]
+  RewriteRule ^ https://veroclear.de%{REQUEST_URI} [L,R=301]
+</IfModule>
