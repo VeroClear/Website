@@ -14,7 +14,7 @@
   const KALK_FELDER = [['proM3', 'Arbeit & Transport pro m³ (€, ohne Entsorgung)'], ['mindestauftrag', 'Mindestauftrag (€)'],
     ['etage', 'Zuschlag je Etage ohne Aufzug ab 2. OG (€)'], ['trageweg', 'Zuschlag Trageweg > 20 m (€)'],
     ['kueche', 'Küchendemontage (€)'], ['reinigungProM2', 'Grundreinigung pro m² (€)'],
-    ['expressProzent', 'Express-Zuschlag (%)'], ['kategorieZuschlag', 'Website-Schätzung: Zuschlag je Kategorie (€)']];
+    ['expressProzent', 'Express-Zuschlag (%)']];
   let PREISE = null;
   let logoData = null;
 
@@ -69,7 +69,7 @@
     seite(`<h1>Hallo Luca 👋</h1><div class="tiles">
       <button class="tile" data-go="besichtigung">📝 Besichtigung<small>Aufnahme vor Ort → Festpreis-Angebot als PDF</small></button>
       <button class="tile" data-go="uebergabe">✅ Übergabe<small>Übergabeprotokoll mit Unterschrift</small></button>
-      <button class="tile" data-go="preise">💶 Preisliste<small>Preise für App und Website pflegen</small></button>
+      <button class="tile" data-go="preise">💶 Preisliste<small>Preise und Entsorgungskosten pflegen</small></button>
       <button class="tile" data-go="archiv">📁 Archiv<small>Alle Angebote und Protokolle</small></button></div>`);
   }
 
@@ -77,19 +77,19 @@
   function preisSeite() {
     const feld = (g, [k, l]) => `<label>${l}<input type="number" inputmode="decimal" step="0.01" min="0" data-g="${g}" data-k="${k}" value="${PREISE[g][k]}"></label>`;
     seite(`${zurueck}<h1>Preisliste</h1>
-      <div class="card"><h2>Ab-Preise (erscheinen auf der Website)</h2><div class="grid">${AB_FELDER.map(f => feld('ab', f)).join('')}</div></div>
+      <div class="card"><h2>Richtpreise (nur für dich, z. B. für Telefonauskünfte)</h2><div class="grid">${AB_FELDER.map(f => feld('ab', f)).join('')}</div></div>
       <div class="card"><h2>Entsorgungskosten (Preise deines Entsorgers, netto)</h2>
         <div class="rows">${FRAKTIONEN.map(([k, l]) => `<div class="row" style="grid-template-columns:1fr 1fr"><label>${l}: € pro Tonne<input type="number" inputmode="decimal" step="0.01" min="0" data-g="entsorgung" data-k="${k}" value="${PREISE.entsorgung[k]}"></label><label>Gewicht: Tonnen pro m³<input type="number" inputmode="decimal" step="0.01" min="0" data-g="dichte" data-k="${k}" value="${PREISE.dichte[k]}"></label></div>`).join('')}</div>
         <div class="grid"><label>Übernahmeschein je Anlieferung (€)<input type="number" inputmode="decimal" step="0.01" min="0" data-g="entsorgung" data-k="uebernahmeschein" value="${PREISE.entsorgung.uebernahmeschein}"></label></div>
         <p class="note">Netto-Preise wie auf der Liste des Entsorgers eintragen – die App rechnet 19 % MwSt drauf, weil du sie als Kleinunternehmer nicht zurückbekommst. Metall bringt dir Geld (Vergütung) und wird daher mit 0 € angesetzt.</p></div>
       <div class="card"><h2>Kalkulation (nur für dich, für Angebote)</h2><div class="grid">${KALK_FELDER.map(f => feld('kalkulation', f)).join('')}</div>
-      <p class="note">Zuletzt gespeichert: ${PREISE.aktualisiert ? new Date(PREISE.aktualisiert).toLocaleString('de-DE') : 'noch nie (Standardwerte)'}</p></div>
+      <p class="note">Auf der Website stehen keine Preise – Kunden bekommen ihren Festpreis nach der Besichtigung.</p><p class="note">Zuletzt gespeichert: ${PREISE.aktualisiert ? new Date(PREISE.aktualisiert).toLocaleString('de-DE') : 'noch nie (Standardwerte)'}</p></div>
       <div id="msg"></div><button class="btn" id="save">Speichern</button>`);
     document.getElementById('save').onclick = async () => {
       const neu = { ab: {}, kalkulation: {}, entsorgung: {}, dichte: {} };
       document.querySelectorAll('[data-g]').forEach(i => { neu[i.dataset.g][i.dataset.k] = num(i.value); });
       const msg = document.getElementById('msg');
-      try { PREISE = (await api('preise_speichern', neu)).preise; msg.innerHTML = '<p class="ok">Gespeichert. Die Website zeigt die neuen Ab-Preise ab sofort.</p>'; }
+      try { PREISE = (await api('preise_speichern', neu)).preise; msg.innerHTML = '<p class="ok">Gespeichert.</p>'; }
       catch (e) { msg.innerHTML = `<p class="err">${esc(e.message)}</p>`; }
     };
   }

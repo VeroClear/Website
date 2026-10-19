@@ -48,11 +48,11 @@ function schreiben(string $name, $daten): void
 function standardPreise(): array
 {
     return [
-        'ab' => ['keller' => 350, 'garage' => 450, 'dachboden' => 550, 'wohnung40' => 990, 'wohnung60' => 1490,
-                 'wohnung80' => 1890, 'wohnung100' => 2390, 'haus' => 2990, 'buero' => 1690,
+        'ab' => ['keller' => 350, 'garage' => 450, 'dachboden' => 550, 'wohnung40' => 790, 'wohnung60' => 1190,
+                 'wohnung80' => 1490, 'wohnung100' => 1890, 'haus' => 2490, 'buero' => 1690,
                  'sperrmuellM3' => 95, 'sperrmuellMin' => 149],
         'kalkulation' => ['proM3' => 30, 'mindestauftrag' => 290, 'etage' => 40, 'trageweg' => 50, 'kueche' => 150,
-                          'reinigungProM2' => 3, 'expressProzent' => 15, 'kategorieZuschlag' => 60],
+                          'reinigungProM2' => 3, 'expressProzent' => 15],
         // Netto-Preise Entsorger Deißlingen (€/t), Stand Okt. 2026; Metall = Vergütung, daher 0
         'entsorgung' => ['sperrmuell' => 295, 'altholz' => 102, 'altholzA4' => 152, 'metall' => 0, 'elektro' => 200,
                          'papier' => 0, 'sonder' => 0, 'uebernahmeschein' => 20],
