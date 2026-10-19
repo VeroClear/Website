@@ -5,8 +5,8 @@ declare(strict_types=1);
 header('Content-Type: application/javascript; charset=utf-8');
 header('Cache-Control: no-cache, must-revalidate');
 
-$ab = ['keller' => 290, 'garage' => 350, 'dachboden' => 490, 'wohnung40' => 750, 'wohnung60' => 1050,
-       'wohnung80' => 1390, 'wohnung100' => 1790, 'haus' => 2290, 'buero' => 1490];
+$ab = ['keller' => 350, 'garage' => 450, 'dachboden' => 550, 'wohnung40' => 990, 'wohnung60' => 1490,
+       'wohnung80' => 1890, 'wohnung100' => 2390, 'haus' => 2990, 'buero' => 1690, 'sperrmuellM3' => 95, 'sperrmuellMin' => 149];
 $kategorieZuschlag = 60;
 
 $datei = __DIR__ . '/../veroclear-app/preise.json';
