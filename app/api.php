@@ -50,8 +50,14 @@ function standardPreise(): array
     return [
         'ab' => ['keller' => 290, 'garage' => 350, 'dachboden' => 490, 'wohnung40' => 750, 'wohnung60' => 1050,
                  'wohnung80' => 1390, 'wohnung100' => 1790, 'haus' => 2290, 'buero' => 1490],
-        'kalkulation' => ['proM3' => 39, 'mindestauftrag' => 290, 'etage' => 40, 'trageweg' => 50, 'kueche' => 150,
+        'kalkulation' => ['proM3' => 30, 'mindestauftrag' => 290, 'etage' => 40, 'trageweg' => 50, 'kueche' => 150,
                           'reinigungProM2' => 3, 'expressProzent' => 15, 'kategorieZuschlag' => 60],
+        // Netto-Preise Entsorger Deißlingen (€/t), Stand Okt. 2026; Metall = Vergütung, daher 0
+        'entsorgung' => ['sperrmuell' => 295, 'altholz' => 102, 'altholzA4' => 152, 'metall' => 0, 'elektro' => 200,
+                         'papier' => 0, 'sonder' => 0, 'uebernahmeschein' => 20],
+        // geschätztes Gewicht lose geladen (t/m³)
+        'dichte' => ['sperrmuell' => 0.18, 'altholz' => 0.25, 'altholzA4' => 0.3, 'metall' => 0.25, 'elektro' => 0.2,
+                     'papier' => 0.08, 'sonder' => 0.3],
         'aktualisiert' => null,
     ];
 }
@@ -117,7 +123,7 @@ if ($aktion === 'preise') {
 
 if ($aktion === 'preise_speichern') {
     $neu = standardPreise();
-    foreach (['ab', 'kalkulation'] as $gruppe) {
+    foreach (['ab', 'kalkulation', 'entsorgung', 'dichte'] as $gruppe) {
         foreach ($neu[$gruppe] as $k => $_) {
             $v = $e[$gruppe][$k] ?? null;
             if (!is_numeric($v) || $v < 0 || $v > 100000) antwort(422, ['ok' => false, 'error' => "Ungültiger Wert: $k"]);

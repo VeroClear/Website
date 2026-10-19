@@ -4,12 +4,13 @@
   const $main = document.getElementById('main');
   const FIRMA = { name: 'VeroClear', inhaber: 'Luca De Caro', strasse: 'Friedrichstraße 10', ort: '78652 Deißlingen',
     tel: '+49 179 11 33 427', mail: 'kontakt@veroclear.de', web: 'veroclear.de' };
-  const FRAKTIONEN = [['sperrmuell', 'Sperrmüll / Möbel'], ['altholz', 'Altholz'], ['metall', 'Metall'],
-    ['elektro', 'Elektro'], ['papier', 'Papier / Kartons'], ['sonder', 'Sondermüll (Farben, Öle …)']];
+  const FRAKTIONEN = [['sperrmuell', 'Sperrmüll / Möbel / Matratzen'], ['altholz', 'Altholz A1–A3 (Möbelholz)'], ['altholzA4', 'Altholz A4 (Fenster, Zäune, Außenholz)'],
+    ['metall', 'Metall / Schrott'], ['elektro', 'Elektrogeräte'], ['papier', 'Papier / Kartons'], ['sonder', 'Sondermüll (Farben, Öle …)']];
+  const MIT_SCHEIN = ['altholzA4', 'elektro'];  // Entsorger verlangt je Anlieferung einen Übernahmeschein
   const AB_FELDER = [['keller', 'Keller bis 10 m²'], ['garage', 'Garage bis 20 m²'], ['dachboden', 'Dachboden bis 25 m²'],
     ['wohnung40', 'Wohnung bis 40 m²'], ['wohnung60', 'Wohnung bis 60 m²'], ['wohnung80', 'Wohnung bis 80 m²'],
     ['wohnung100', 'Wohnung bis 100 m²'], ['haus', 'Haus ab 100 m²'], ['buero', 'Büro / Gewerbe']];
-  const KALK_FELDER = [['proM3', 'Preis pro m³ Räumgut (€)'], ['mindestauftrag', 'Mindestauftrag (€)'],
+  const KALK_FELDER = [['proM3', 'Arbeit & Transport pro m³ (€, ohne Entsorgung)'], ['mindestauftrag', 'Mindestauftrag (€)'],
     ['etage', 'Zuschlag je Etage ohne Aufzug ab 2. OG (€)'], ['trageweg', 'Zuschlag Trageweg > 20 m (€)'],
     ['kueche', 'Küchendemontage (€)'], ['reinigungProM2', 'Grundreinigung pro m² (€)'],
     ['expressProzent', 'Express-Zuschlag (%)'], ['kategorieZuschlag', 'Website-Schätzung: Zuschlag je Kategorie (€)']];
@@ -76,11 +77,15 @@
     const feld = (g, [k, l]) => `<label>${l}<input type="number" inputmode="decimal" step="0.01" min="0" data-g="${g}" data-k="${k}" value="${PREISE[g][k]}"></label>`;
     seite(`${zurueck}<h1>Preisliste</h1>
       <div class="card"><h2>Ab-Preise (erscheinen auf der Website)</h2><div class="grid">${AB_FELDER.map(f => feld('ab', f)).join('')}</div></div>
+      <div class="card"><h2>Entsorgungskosten (Preise deines Entsorgers, netto)</h2>
+        <div class="rows">${FRAKTIONEN.map(([k, l]) => `<div class="row" style="grid-template-columns:1fr 1fr"><label>${l}: € pro Tonne<input type="number" inputmode="decimal" step="0.01" min="0" data-g="entsorgung" data-k="${k}" value="${PREISE.entsorgung[k]}"></label><label>Gewicht: Tonnen pro m³<input type="number" inputmode="decimal" step="0.01" min="0" data-g="dichte" data-k="${k}" value="${PREISE.dichte[k]}"></label></div>`).join('')}</div>
+        <div class="grid"><label>Übernahmeschein je Anlieferung (€)<input type="number" inputmode="decimal" step="0.01" min="0" data-g="entsorgung" data-k="uebernahmeschein" value="${PREISE.entsorgung.uebernahmeschein}"></label></div>
+        <p class="note">Netto-Preise wie auf der Liste des Entsorgers eintragen – die App rechnet 19 % MwSt drauf, weil du sie als Kleinunternehmer nicht zurückbekommst. Metall bringt dir Geld (Vergütung) und wird daher mit 0 € angesetzt.</p></div>
       <div class="card"><h2>Kalkulation (nur für dich, für Angebote)</h2><div class="grid">${KALK_FELDER.map(f => feld('kalkulation', f)).join('')}</div>
       <p class="note">Zuletzt gespeichert: ${PREISE.aktualisiert ? new Date(PREISE.aktualisiert).toLocaleString('de-DE') : 'noch nie (Standardwerte)'}</p></div>
       <div id="msg"></div><button class="btn" id="save">Speichern</button>`);
     document.getElementById('save').onclick = async () => {
-      const neu = { ab: {}, kalkulation: {} };
+      const neu = { ab: {}, kalkulation: {}, entsorgung: {}, dichte: {} };
       document.querySelectorAll('[data-g]').forEach(i => { neu[i.dataset.g][i.dataset.k] = num(i.value); });
       const msg = document.getElementById('msg');
       try { PREISE = (await api('preise_speichern', neu)).preise; msg.innerHTML = '<p class="ok">Gespeichert. Die Website zeigt die neuen Ab-Preise ab sofort.</p>'; }
@@ -121,6 +126,19 @@
     return { leer: () => leer, bild: () => { if (leer) return null; const w = document.createElement('canvas'); w.width = c.width / 2; w.height = c.height / 2; const g = w.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, w.width, w.height); g.drawImage(c, 0, 0, w.width, w.height); return w.toDataURL('image/jpeg', 0.85); }, loeschen: () => { ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clearRect(0, 0, c.width, c.height); groesse(); } };
   }
 
+  // Entsorgungskosten brutto: m³ × t/m³ × €/t netto × 1,19 (+ Übernahmescheine)
+  function entsorgungskosten(mengen) {
+    const E = PREISE.entsorgung, D = PREISE.dichte, MWST = 1.19;
+    let summe = 0; const details = [];
+    mengen.forEach(([k, m3]) => {
+      if (m3 <= 0) return;
+      const t = m3 * D[k], kosten = t * E[k] * MWST;
+      summe += kosten; details.push(`${FRAKTIONEN.find(f => f[0] === k)[1].split(' (')[0]}: ca. ${t.toLocaleString('de-DE', { maximumFractionDigits: 2 })} t = ${eur(kosten)}`);
+      if (MIT_SCHEIN.includes(k) && E.uebernahmeschein > 0) { summe += E.uebernahmeschein * MWST; details.push(`Übernahmeschein ${eur(E.uebernahmeschein * MWST)}`); }
+    });
+    return { summe, details };
+  }
+
   // ── Besichtigung / Angebot ──
   function besichtigung() {
     const fotos = [];
@@ -137,7 +155,7 @@
         <label class="chk"><input type="checkbox" id="oauf"> Aufzug vorhanden</label>
         <label class="chk"><input type="checkbox" id="otrag"> Trageweg über 20 m</label></div>
       <div class="card"><h2>Räumgut (geschätzt in m³)</h2><div class="grid">${FRAKTIONEN.map(([k, l]) => `<label>${l}<input type="number" inputmode="decimal" step="0.5" min="0" data-m3="${k}"></label>`).join('')}</div>
-        <p class="note">Abgerechnet wird das Gesamtvolumen × ${eur(K.proM3)}/m³. Die Aufteilung dient deiner Entsorgungsplanung.</p></div>
+        <p class="note">Arbeit & Transport: ${eur(K.proM3)}/m³. Entsorgung wird je Abfallart nach den Preisen deines Entsorgers berechnet (Preisliste).</p><div id="entsinfo" class="note"></div></div>
       <div class="card"><h2>Zusatzleistungen</h2>
         <label class="chk"><input type="checkbox" id="zk"> Küchendemontage (${eur(K.kueche)})</label>
         <label class="chk"><input type="checkbox" id="ze"> Express innerhalb 48 h (+${K.expressProzent} %)</label>
@@ -169,7 +187,10 @@
       const m3 = FRAKTIONEN.reduce((s, [k]) => s + num(document.querySelector(`[data-m3="${k}"]`).value), 0);
       const et = Math.max(0, Math.floor(num(document.getElementById('oet').value)));
       const p = [];
-      p.push([`Räumung, Abtransport und fachgerechte Entsorgung (ca. ${m3.toLocaleString('de-DE')} m³)`, m3 * K.proM3]);
+      p.push([`Räumung und Abtransport (ca. ${m3.toLocaleString('de-DE')} m³)`, m3 * K.proM3]);
+      const ent = entsorgungskosten(FRAKTIONEN.map(([k]) => [k, num(document.querySelector(`[data-m3="${k}"]`).value)]));
+      if (ent.summe > 0) p.push(['Fachgerechte Entsorgung inkl. Entsorgungsgebühren', ent.summe]);
+      document.getElementById('entsinfo').innerHTML = ent.details.length ? 'Entsorgung (nur für dich): ' + ent.details.map(esc).join(' · ') : '';
       if (!document.getElementById('oauf').checked && et >= 2) p.push([`Etagenzuschlag ohne Aufzug (${et}. OG)`, (et - 1) * K.etage]);
       if (document.getElementById('otrag').checked) p.push(['Zuschlag Trageweg über 20 m', K.trageweg]);
       if (document.getElementById('zk').checked) p.push(['Küchendemontage', K.kueche]);
