@@ -110,7 +110,7 @@ if (mb_strlen($name) < 2 || strlen(preg_replace('/\D/', '', $telefon) ?? '') < 6
 $email = zeile($p, 'email', 120);
 if ($email !== '' && !filter_var($email, FILTER_VALIDATE_EMAIL)) $email = '';
 
-$objekte = ['wohnung' => 'Wohnung', 'haus' => 'Haus', 'keller' => 'Keller / Dachboden', 'buero' => 'Büro / Gewerbe'];
+$objekte = ['wohnung' => 'Wohnung', 'haus' => 'Haus', 'keller' => 'Keller / Dachboden', 'buero' => 'Büro / Gewerbe', 'sonstiges' => 'Sonstiges'];
 $typ = zeile($p, 'object_type', 40);
 $objekt = $objekte[$typ] ?? ($typ ?: '–');
 
@@ -119,9 +119,7 @@ $notizen = mb_substr(trim(preg_replace('/[\x00-\x09\x0B-\x1F\x7F]+/u', ' ', $not
 // Mailserver lehnen Zeilen über 998 Zeichen ab, daher lange Zeilen umbrechen.
 $notizen = wordwrap($notizen, 76, "\n");
 
-$schaetzung = is_numeric($p['estimate'] ?? null)
-    ? '~' . number_format((float) $p['estimate'], 0, ',', '.') . ' €'
-    : '–';
+$flaeche = zeile($p, 'flaeche', 10);
 
 $zeit = new DateTime('now', new DateTimeZone('Europe/Berlin'));
 
@@ -134,9 +132,9 @@ $text = "Neue Anfrage über die Website\n\n"
     . "AUFTRAG\n"
     . "Objekt:        $objekt\n"
     . 'Vorhanden:     ' . (liste($p, 'categories') ?: '–') . "\n"
-    . 'Optionen:      ' . (liste($p, 'options') ?: '–') . "\n"
+    . 'Fläche:        ' . ($flaeche !== '' ? "ca. $flaeche m²" : '–') . "\n"
     . 'Besichtigung:  ' . (zeile($p, 'visit_type', 30) ?: '–') . "\n"
-    . "Schätzung:     $schaetzung\n\n"
+    . "\n"
     . "ANMERKUNGEN\n"
     . ($notizen ?: '–') . "\n\n"
     . 'Eingegangen am ' . $zeit->format('d.m.Y \u\m H:i') . " Uhr\n";
