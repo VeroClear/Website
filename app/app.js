@@ -75,12 +75,12 @@
 
   // ── Preisliste ──
   function preisSeite() {
-    const feld = (g, [k, l]) => `<label>${l}<input type="number" inputmode="decimal" step="0.01" min="0" data-g="${g}" data-k="${k}" value="${PREISE[g][k]}"></label>`;
+    const feld = (g, [k, l]) => `<label>${l}<input type="text" inputmode="decimal" step="0.01" min="0" data-g="${g}" data-k="${k}" value="${PREISE[g][k]}"></label>`;
     seite(`${zurueck}<h1>Preisliste</h1>
       <div class="card"><h2>Richtpreise (nur für dich, z. B. für Telefonauskünfte)</h2><div class="grid">${AB_FELDER.map(f => feld('ab', f)).join('')}</div></div>
       <div class="card"><h2>Entsorgungskosten (Preise deines Entsorgers, netto)</h2>
-        <div class="rows">${FRAKTIONEN.map(([k, l]) => `<div class="row" style="grid-template-columns:1fr 1fr"><label>${l}: € pro Tonne<input type="number" inputmode="decimal" step="0.01" min="0" data-g="entsorgung" data-k="${k}" value="${PREISE.entsorgung[k]}"></label><label>Gewicht: Tonnen pro m³<input type="number" inputmode="decimal" step="0.01" min="0" data-g="dichte" data-k="${k}" value="${PREISE.dichte[k]}"></label></div>`).join('')}</div>
-        <div class="grid"><label>Übernahmeschein je Anlieferung (€)<input type="number" inputmode="decimal" step="0.01" min="0" data-g="entsorgung" data-k="uebernahmeschein" value="${PREISE.entsorgung.uebernahmeschein}"></label></div>
+        <div class="rows">${FRAKTIONEN.map(([k, l]) => `<div class="row" style="grid-template-columns:1fr 1fr"><label>${l}: € pro Tonne<input type="text" inputmode="decimal" step="0.01" min="0" data-g="entsorgung" data-k="${k}" value="${PREISE.entsorgung[k]}"></label><label>Gewicht: Tonnen pro m³<input type="text" inputmode="decimal" step="0.01" min="0" data-g="dichte" data-k="${k}" value="${PREISE.dichte[k]}"></label></div>`).join('')}</div>
+        <div class="grid"><label>Übernahmeschein je Anlieferung (€)<input type="text" inputmode="decimal" step="0.01" min="0" data-g="entsorgung" data-k="uebernahmeschein" value="${PREISE.entsorgung.uebernahmeschein}"></label></div>
         <p class="note">Netto-Preise wie auf der Liste des Entsorgers eintragen – die App rechnet 19 % MwSt drauf, weil du sie als Kleinunternehmer nicht zurückbekommst. Metall bringt dir Geld (Vergütung) und wird daher mit 0 € angesetzt.</p></div>
       <div class="card"><h2>Kalkulation (nur für dich, für Angebote)</h2><div class="grid">${KALK_FELDER.map(f => feld('kalkulation', f)).join('')}</div>
       <p class="note">Auf der Website stehen keine Preise – Kunden bekommen ihren Festpreis nach der Besichtigung.</p><p class="note">Zuletzt gespeichert: ${PREISE.aktualisiert ? new Date(PREISE.aktualisiert).toLocaleString('de-DE') : 'noch nie (Standardwerte)'}</p></div>
@@ -151,22 +151,23 @@
       <div class="card"><h2>Objekt</h2><div class="grid">
         <label>Adresse des Objekts *<input id="oadr"></label>
         <label>Objektart<select id="oart"><option>Wohnung</option><option>Haus</option><option>Keller / Dachboden</option><option>Garage</option><option>Büro / Gewerbe</option><option>Sperrmüllabholung</option></select></label>
-        <label>Fläche (m²)<input id="ofl" type="number" inputmode="decimal"></label>
+        <label>Fläche (m²)<input id="ofl" type="text" inputmode="decimal"></label>
+        <label>Wie voll ist es?<select id="ofg"><option value="0.1">fast leer</option><option value="0.3" selected>normal eingerichtet</option><option value="0.5">sehr voll</option><option value="0.8">extrem voll / Messie</option></select></label>
         <label>Etage (0 = EG)<input id="oet" type="number" inputmode="numeric" value="0"></label></div>
         <label class="chk"><input type="checkbox" id="oauf"> Aufzug vorhanden</label>
         <label class="chk"><input type="checkbox" id="otrag"> Trageweg über 20 m</label></div>
-      <div class="card"><h2>Räumgut (geschätzt in m³)</h2><div class="grid">${FRAKTIONEN.map(([k, l]) => `<label>${l}<input type="number" inputmode="decimal" step="0.5" min="0" data-m3="${k}"></label>`).join('')}</div>
-        <p class="note">Arbeit & Transport: ${eur(K.proM3)}/m³. Entsorgung wird je Abfallart nach den Preisen deines Entsorgers berechnet (Preisliste).</p><div id="entsinfo" class="note"></div></div>
+      <div class="card"><h2>Räumgut (geschätzt in m³)</h2><div class="grid">${FRAKTIONEN.map(([k, l]) => `<label>${l}<input type="text" inputmode="decimal" step="0.5" min="0" data-m3="${k}"></label>`).join('')}</div>
+        <p class="note"><b>Leer lassen</b> = die App schätzt die Menge aus Fläche und „Wie voll ist es?“. Sobald du hier Werte einträgst, wird damit gerechnet.</p><p class="note">Arbeit & Transport: ${eur(K.proM3)}/m³. Entsorgung wird je Abfallart nach den Preisen deines Entsorgers berechnet (Preisliste).</p><div id="entsinfo" class="note"></div></div>
       <div class="card"><h2>Zusatzleistungen</h2>
         <label class="chk"><input type="checkbox" id="zk"> Küchendemontage (${eur(K.kueche)})</label>
         <label class="chk"><input type="checkbox" id="ze"> Express innerhalb 48 h (+${K.expressProzent} %)</label>
-        <label>Grundreinigung (m², ${eur(K.reinigungProM2)}/m²)<input id="zr" type="number" inputmode="decimal" min="0"></label>
+        <label>Grundreinigung (m², ${eur(K.reinigungProM2)}/m²)<input id="zr" type="text" inputmode="decimal" min="0"></label>
         <p class="note">Besenreine Übergabe ist immer inklusive.</p></div>
       <div class="card"><h2>Wertanrechnung</h2><div class="rows" id="wert"></div><button class="btn sec small" id="wadd">+ Gegenstand</button></div>
       <div class="card"><h2>Fotos</h2><div id="fotos"></div></div>
       <div class="card"><h2>Notizen für das Angebot</h2><textarea id="notiz" placeholder="z. B. Zugang über Hof, Termin nach Absprache"></textarea></div>
       <div class="card"><h2>Kalkulation</h2><table class="calc" id="calc"></table>
-        <label style="margin-top:12px">Festpreis (anpassbar)<input id="fp" type="number" inputmode="decimal"></label>
+        <label style="margin-top:12px">Festpreis (anpassbar)<input id="fp" type="text" inputmode="decimal"></label>
         <label>Angebot gültig bis<input id="gueltig" value="${plusTage(14)}"></label></div>
       <div class="card"><h2>Auftrag vor Ort erteilt? (optional)</h2>
         <label class="chk"><input type="checkbox" id="auftrag"> Kunde erteilt den Auftrag zum Festpreis</label>
@@ -179,17 +180,27 @@
     document.getElementById('auftrag').onchange = e => { document.getElementById('sigbox').hidden = !e.target.checked; if (e.target.checked) sig.loeschen(); };
     document.getElementById('sigclr').onclick = () => sig.loeschen();
     const wertBox = document.getElementById('wert');
-    const wertZeile = () => { const d = document.createElement('div'); d.className = 'row'; d.innerHTML = '<label>Gegenstand<input class="wb"></label><label>Betrag €<input class="wv" type="number" inputmode="decimal" min="0"></label><button class="x">×</button>'; d.querySelector('.x').onclick = () => { d.remove(); rechnen(); }; wertBox.append(d); };
+    const wertZeile = () => { const d = document.createElement('div'); d.className = 'row'; d.innerHTML = '<label>Gegenstand<input class="wb"></label><label>Betrag €<input class="wv" type="text" inputmode="decimal" min="0"></label><button class="x">×</button>'; d.querySelector('.x').onclick = () => { d.remove(); rechnen(); }; wertBox.append(d); };
     document.getElementById('wadd').onclick = () => wertZeile();
     let fpManuell = false;
     document.getElementById('fp').oninput = () => { fpManuell = true; zeigeSumme(); };
 
     function posten() {
-      const m3 = FRAKTIONEN.reduce((s, [k]) => s + num(document.querySelector(`[data-m3="${k}"]`).value), 0);
+      let mengen = FRAKTIONEN.map(([k]) => [k, num(document.querySelector(`[data-m3="${k}"]`).value)]);
+      let m3 = mengen.reduce((s, [, v]) => s + v, 0);
+      let geschaetzt = false;
+      const fl = num(document.getElementById('ofl').value);
+      if (m3 === 0 && fl > 0) {  // keine m³ erfasst → aus Fläche × Füllgrad schätzen, typische Aufteilung
+        m3 = Math.round(fl * num(document.getElementById('ofg').value) * 2) / 2;
+        const anteil = { sperrmuell: 0.6, altholz: 0.2, metall: 0.05, elektro: 0.05, papier: 0.1 };
+        mengen = FRAKTIONEN.map(([k]) => [k, m3 * (anteil[k] || 0)]);
+        geschaetzt = true;
+      }
       const et = Math.max(0, Math.floor(num(document.getElementById('oet').value)));
       const p = [];
       p.push([`Räumung und Abtransport (ca. ${m3.toLocaleString('de-DE')} m³)`, m3 * K.proM3]);
-      const ent = entsorgungskosten(FRAKTIONEN.map(([k]) => [k, num(document.querySelector(`[data-m3="${k}"]`).value)]));
+      const ent = entsorgungskosten(mengen);
+      if (geschaetzt) ent.details.unshift(`Menge geschätzt aus ${fl.toLocaleString('de-DE')} m² × Füllgrad`);
       if (ent.summe > 0) p.push(['Fachgerechte Entsorgung inkl. Entsorgungsgebühren', ent.summe]);
       document.getElementById('entsinfo').innerHTML = ent.details.length ? 'Entsorgung (nur für dich): ' + ent.details.map(esc).join(' · ') : '';
       if (!document.getElementById('oauf').checked && et >= 2) p.push([`Etagenzuschlag ohne Aufzug (${et}. OG)`, (et - 1) * K.etage]);
@@ -214,7 +225,7 @@
       zeigeSumme();
     }
     $main.oninput = e => { if (e.target.id !== 'fp') rechnen(); };
-    $main.onchange = e => { if (e.target.id === 'oart' || e.target.type === 'checkbox' && e.target.id !== 'ankunde' && e.target.id !== 'auftrag') rechnen(); };
+    $main.onchange = e => { if (e.target.id === 'oart' || e.target.id === 'ofg' || e.target.type === 'checkbox' && e.target.id !== 'ankunde' && e.target.id !== 'auftrag') rechnen(); };
     rechnen();
 
     document.getElementById('senden').onclick = async () => {
