@@ -48,8 +48,9 @@ function schreiben(string $name, $daten): void
 function standardPreise(): array
 {
     return [
-        'ab' => ['keller' => 290, 'garage' => 350, 'dachboden' => 490, 'wohnung40' => 750, 'wohnung60' => 1050,
-                 'wohnung80' => 1390, 'wohnung100' => 1790, 'haus' => 2290, 'buero' => 1490],
+        'ab' => ['keller' => 350, 'garage' => 450, 'dachboden' => 550, 'wohnung40' => 990, 'wohnung60' => 1490,
+                 'wohnung80' => 1890, 'wohnung100' => 2390, 'haus' => 2990, 'buero' => 1690,
+                 'sperrmuellM3' => 95, 'sperrmuellMin' => 149],
         'kalkulation' => ['proM3' => 30, 'mindestauftrag' => 290, 'etage' => 40, 'trageweg' => 50, 'kueche' => 150,
                           'reinigungProM2' => 3, 'expressProzent' => 15, 'kategorieZuschlag' => 60],
         // Netto-Preise Entsorger Deißlingen (€/t), Stand Okt. 2026; Metall = Vergütung, daher 0

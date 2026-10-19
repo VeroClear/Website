@@ -9,7 +9,8 @@
   const MIT_SCHEIN = ['altholzA4', 'elektro'];  // Entsorger verlangt je Anlieferung einen Übernahmeschein
   const AB_FELDER = [['keller', 'Keller bis 10 m²'], ['garage', 'Garage bis 20 m²'], ['dachboden', 'Dachboden bis 25 m²'],
     ['wohnung40', 'Wohnung bis 40 m²'], ['wohnung60', 'Wohnung bis 60 m²'], ['wohnung80', 'Wohnung bis 80 m²'],
-    ['wohnung100', 'Wohnung bis 100 m²'], ['haus', 'Haus ab 100 m²'], ['buero', 'Büro / Gewerbe']];
+    ['wohnung100', 'Wohnung bis 100 m²'], ['haus', 'Haus ab 100 m²'], ['buero', 'Büro / Gewerbe'],
+    ['sperrmuellM3', 'Sperrmüllabholung: € pro m³ (inkl. Entsorgung)'], ['sperrmuellMin', 'Sperrmüllabholung: Mindestpreis (€)']];
   const KALK_FELDER = [['proM3', 'Arbeit & Transport pro m³ (€, ohne Entsorgung)'], ['mindestauftrag', 'Mindestauftrag (€)'],
     ['etage', 'Zuschlag je Etage ohne Aufzug ab 2. OG (€)'], ['trageweg', 'Zuschlag Trageweg > 20 m (€)'],
     ['kueche', 'Küchendemontage (€)'], ['reinigungProM2', 'Grundreinigung pro m² (€)'],
@@ -149,7 +150,7 @@
         <label>E-Mail<input id="kmail" type="email"></label><label>Anschrift Kunde<input id="kadr"></label></div></div>
       <div class="card"><h2>Objekt</h2><div class="grid">
         <label>Adresse des Objekts *<input id="oadr"></label>
-        <label>Objektart<select id="oart"><option>Wohnung</option><option>Haus</option><option>Keller / Dachboden</option><option>Garage</option><option>Büro / Gewerbe</option></select></label>
+        <label>Objektart<select id="oart"><option>Wohnung</option><option>Haus</option><option>Keller / Dachboden</option><option>Garage</option><option>Büro / Gewerbe</option><option>Sperrmüllabholung</option></select></label>
         <label>Fläche (m²)<input id="ofl" type="number" inputmode="decimal"></label>
         <label>Etage (0 = EG)<input id="oet" type="number" inputmode="numeric" value="0"></label></div>
         <label class="chk"><input type="checkbox" id="oauf"> Aufzug vorhanden</label>
@@ -196,7 +197,9 @@
       if (document.getElementById('zk').checked) p.push(['Küchendemontage', K.kueche]);
       const rm = num(document.getElementById('zr').value); if (rm > 0) p.push([`Grundreinigung (${rm.toLocaleString('de-DE')} m²)`, rm * K.reinigungProM2]);
       let zwischen = p.reduce((s, x) => s + x[1], 0);
-      if (zwischen < K.mindestauftrag) { p.push(['Aufrundung auf Mindestauftrag', K.mindestauftrag - zwischen]); zwischen = K.mindestauftrag; }
+      const klein = document.getElementById('oart').value === 'Sperrmüllabholung';
+      const minPreis = klein ? PREISE.ab.sperrmuellMin : K.mindestauftrag;
+      if (zwischen < minPreis) { p.push([klein ? 'Aufrundung auf Mindestpreis Sperrmüllabholung' : 'Aufrundung auf Mindestauftrag', minPreis - zwischen]); zwischen = minPreis; }
       if (document.getElementById('ze').checked) p.push([`Express-Zuschlag (${K.expressProzent} %)`, zwischen * K.expressProzent / 100]);
       const wert = [...wertBox.querySelectorAll('.row')].map(r => [r.querySelector('.wb').value.trim(), num(r.querySelector('.wv').value)]).filter(([b, v]) => b || v);
       wert.forEach(([b, v]) => p.push([`Wertanrechnung: ${b || 'Gegenstand'}`, -v]));
@@ -211,7 +214,7 @@
       zeigeSumme();
     }
     $main.oninput = e => { if (e.target.id !== 'fp') rechnen(); };
-    $main.onchange = e => { if (e.target.type === 'checkbox' && e.target.id !== 'ankunde' && e.target.id !== 'auftrag') rechnen(); };
+    $main.onchange = e => { if (e.target.id === 'oart' || e.target.type === 'checkbox' && e.target.id !== 'ankunde' && e.target.id !== 'auftrag') rechnen(); };
     rechnen();
 
     document.getElementById('senden').onclick = async () => {
