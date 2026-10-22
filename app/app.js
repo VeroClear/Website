@@ -154,9 +154,9 @@
     seite(`${zurueck}<h1>Besichtigung</h1>
       <div class="card"><h2>Kunde</h2><div class="grid">
         <label>Name *<input id="kname" autocomplete="off"></label><label>Telefon<input id="ktel" type="tel"></label>
-        <label>E-Mail<input id="kmail" type="email"></label><label>Anschrift Kunde<input id="kadr"></label></div></div>
+        <label>E-Mail<input id="kmail" type="email"></label><label class="breit">Anschrift Kunde<textarea id="kadr" rows="2" placeholder="Straße Hausnummer, PLZ Ort"></textarea></label></div></div>
       <div class="card"><h2>Objekt</h2><div class="grid">
-        <label>Adresse des Objekts *<input id="oadr"></label>
+        <label class="breit">Adresse des Objekts *<textarea id="oadr" rows="2" placeholder="Straße Hausnummer, PLZ Ort, ggf. Etage / Hinterhaus"></textarea></label>
         <label>Objektart<select id="oart"><option>Wohnung</option><option>Haus</option><option>Keller / Dachboden</option><option>Garage</option><option>Büro / Gewerbe</option><option>Sperrmüllabholung</option></select></label>
         <label>Fläche (m²)<input id="ofl" type="text" inputmode="decimal"></label>
         <label>Wie voll ist es?<select id="ofg">${Object.entries(FUELLGRAD).map(([k, [l]]) => `<option value="${k}"${k === 'normal' ? ' selected' : ''}>${l}</option>`).join('')}</select></label>
@@ -279,7 +279,7 @@
 
     document.getElementById('senden').onclick = async () => {
       const msg = document.getElementById('msg');
-      const v = id => document.getElementById(id).value.trim();
+      const v = id => document.getElementById(id).value.trim().replace(/\s*\n+\s*/g, ', ');
       if (!v('kname') || !v('oadr')) { msg.innerHTML = '<p class="err">Bitte Name und Objektadresse ausfüllen.</p>'; document.getElementById('kname').scrollIntoView({ block: 'center' }); return; }
       if (document.getElementById('auftrag').checked && sig.leer()) { msg.innerHTML = '<p class="err">Bitte Unterschrift des Kunden einholen oder Häkchen bei „Auftrag erteilt“ entfernen.</p>'; return; }
       const btn = document.getElementById('senden'); btn.disabled = true; btn.textContent = 'Wird erstellt …';
@@ -314,7 +314,7 @@
       <div class="card"><label>Aus Angebot übernehmen<select id="vorlage"><option value="">– neu –</option>${angebote.map((a, i) => `<option value="${i}">${esc(a.nummer)} · ${esc(a.kunde)} · ${esc(a.objekt)}</option>`).join('')}</select></label></div>
       <div class="card"><h2>Kunde & Objekt</h2><div class="grid">
         <label>Name *<input id="kname"></label><label>E-Mail<input id="kmail" type="email"></label>
-        <label>Telefon<input id="ktel" type="tel"></label><label>Adresse des Objekts *<input id="oadr"></label>
+        <label>Telefon<input id="ktel" type="tel"></label><label class="breit">Adresse des Objekts *<textarea id="oadr" rows="2" placeholder="Straße Hausnummer, PLZ Ort, ggf. Etage / Hinterhaus"></textarea></label>
         <label>Bezug (Angebots-Nr.)<input id="bezug"></label><label>Datum / Uhrzeit<input id="zeit" value="${new Date().toLocaleString('de-DE', { dateStyle: 'medium', timeStyle: 'short' })}"></label></div></div>
       <div class="card"><h2>Zustand bei Übergabe</h2>
         <label class="chk"><input type="checkbox" id="c1" checked> Alle vereinbarten Räume vollständig geräumt</label>
@@ -339,7 +339,7 @@
       set('kname', a.kunde); set('kmail', a.email); set('ktel', a.telefon); set('oadr', a.objekt); set('bezug', a.nummer);
     };
     document.getElementById('senden').onclick = async () => {
-      const msg = document.getElementById('msg'); const v = id => document.getElementById(id).value.trim(); const c = id => document.getElementById(id).checked;
+      const msg = document.getElementById('msg'); const v = id => document.getElementById(id).value.trim().replace(/\s*\n+\s*/g, ', '); const c = id => document.getElementById(id).checked;
       if (!v('kname') || !v('oadr')) { msg.innerHTML = '<p class="err">Bitte Name und Objektadresse ausfüllen.</p>'; return; }
       if (sk.leer()) { msg.innerHTML = '<p class="err">Bitte Unterschrift des Kunden einholen.</p>'; return; }
       const btn = document.getElementById('senden'); btn.disabled = true; btn.textContent = 'Wird erstellt …';
