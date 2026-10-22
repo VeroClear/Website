@@ -48,17 +48,21 @@ function schreiben(string $name, $daten): void
 function standardPreise(): array
 {
     return [
-        'ab' => ['keller' => 350, 'garage' => 450, 'dachboden' => 550, 'wohnung40' => 790, 'wohnung60' => 1190,
-                 'wohnung80' => 1490, 'wohnung100' => 1890, 'haus' => 2490, 'buero' => 1690,
+        'ab' => ['keller' => 290, 'garage' => 360, 'dachboden' => 450, 'wohnung40' => 720, 'wohnung60' => 1080,
+                 'wohnung80' => 1440, 'wohnung100' => 1800, 'haus' => 2430, 'buero' => 1500,
                  'sperrmuellM3' => 95, 'sperrmuellMin' => 149],
-        'kalkulation' => ['proM3' => 30, 'mindestauftrag' => 290, 'etage' => 40, 'trageweg' => 50, 'kueche' => 150,
-                          'reinigungProM2' => 3, 'expressProzent' => 15],
+        'kalkulation' => ['proM3' => 30, 'mindestauftrag' => 290,
+                          // Flächenpreise je Füllgrad (Marktmitte), Vergleich zur Kostenrechnung
+                          'm2Wenig' => 18, 'm2Normal' => 24, 'm2Stark' => 33, 'm2Messie' => 46, 'm2Buero' => 15,
+                          'etageProzent' => 7, 'trageweg' => 50, 'halteverbot' => 120, 'kueche' => 250,
+                          'kuehlgeraet' => 30, 'sonderPosition' => 150, 'bigBag' => 150, 'stundensatz' => 50,
+                          'anfahrtFreiKm' => 30, 'anfahrtProKm' => 1.5, 'reinigungProM2' => 3, 'expressProzent' => 15],
         // Netto-Preise Entsorger Deißlingen (€/t), Stand Okt. 2026; Metall = Vergütung, daher 0
         'entsorgung' => ['sperrmuell' => 295, 'altholz' => 102, 'altholzA4' => 152, 'metall' => 0, 'elektro' => 200,
-                         'papier' => 0, 'sonder' => 0, 'uebernahmeschein' => 20],
+                         'papier' => 0, 'uebernahmeschein' => 20],
         // geschätztes Gewicht lose geladen (t/m³)
         'dichte' => ['sperrmuell' => 0.18, 'altholz' => 0.25, 'altholzA4' => 0.3, 'metall' => 0.25, 'elektro' => 0.2,
-                     'papier' => 0.08, 'sonder' => 0.3],
+                     'papier' => 0.08],
         'aktualisiert' => null,
     ];
 }

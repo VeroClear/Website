@@ -5,16 +5,23 @@
   const FIRMA = { name: 'VeroClear', inhaber: 'Luca De Caro', strasse: 'Friedrichstraße 10', ort: '78652 Deißlingen',
     tel: '+49 179 11 33 427', mail: 'kontakt@veroclear.de', web: 'veroclear.de' };
   const FRAKTIONEN = [['sperrmuell', 'Sperrmüll / Möbel / Matratzen'], ['altholz', 'Altholz A1–A3 (Möbelholz)'], ['altholzA4', 'Altholz A4 (Fenster, Zäune, Außenholz)'],
-    ['metall', 'Metall / Schrott'], ['elektro', 'Elektrogeräte'], ['papier', 'Papier / Kartons'], ['sonder', 'Sondermüll (Farben, Öle …)']];
+    ['metall', 'Metall / Schrott'], ['elektro', 'Elektrogeräte'], ['papier', 'Papier / Kartons']];
   const MIT_SCHEIN = ['altholzA4', 'elektro'];  // Entsorger verlangt je Anlieferung einen Übernahmeschein
   const AB_FELDER = [['keller', 'Keller bis 10 m²'], ['garage', 'Garage bis 20 m²'], ['dachboden', 'Dachboden bis 25 m²'],
     ['wohnung40', 'Wohnung bis 40 m²'], ['wohnung60', 'Wohnung bis 60 m²'], ['wohnung80', 'Wohnung bis 80 m²'],
     ['wohnung100', 'Wohnung bis 100 m²'], ['haus', 'Haus ab 100 m²'], ['buero', 'Büro / Gewerbe'],
     ['sperrmuellM3', 'Sperrmüllabholung: € pro m³ (inkl. Entsorgung)'], ['sperrmuellMin', 'Sperrmüllabholung: Mindestpreis (€)']];
   const KALK_FELDER = [['proM3', 'Arbeit & Transport pro m³ (€, ohne Entsorgung)'], ['mindestauftrag', 'Mindestauftrag (€)'],
-    ['etage', 'Zuschlag je Etage ohne Aufzug ab 2. OG (€)'], ['trageweg', 'Zuschlag Trageweg > 20 m (€)'],
-    ['kueche', 'Küchendemontage (€)'], ['reinigungProM2', 'Grundreinigung pro m² (€)'],
-    ['expressProzent', 'Express-Zuschlag (%)']];
+    ['m2Wenig', 'Flächenpreis wenig Inventar (€/m²)'], ['m2Normal', 'Flächenpreis normal möbliert (€/m²)'],
+    ['m2Stark', 'Flächenpreis stark gefüllt (€/m²)'], ['m2Messie', 'Flächenpreis Messie (€/m²)'], ['m2Buero', 'Flächenpreis Büro / Laden (€/m²)'],
+    ['etageProzent', 'Etage ohne Aufzug: Zuschlag je Geschoss (%)'], ['trageweg', 'Zuschlag Trageweg > 20 m (€)'],
+    ['halteverbot', 'Halteverbotszone beantragen (€)'], ['kueche', 'Küchendemontage (€)'],
+    ['kuehlgeraet', 'Kühl-/Klimagerät je Stück (€)'], ['sonderPosition', 'Schadstoffe je Position (€)'],
+    ['bigBag', 'Big Bag 1 m³ inkl. Entsorgung (€)'], ['stundensatz', 'Stundensatz je Arbeitskraft (€)'],
+    ['anfahrtFreiKm', 'Anfahrt kostenlos bis (km)'], ['anfahrtProKm', 'Anfahrt je weiteren km (€)'],
+    ['reinigungProM2', 'Grundreinigung pro m² (€)'], ['expressProzent', 'Express-Zuschlag (%)']];
+  const FUELLGRAD = { wenig: ['wenig Inventar', 0.15, 'm2Wenig'], normal: ['normal möbliert', 0.3, 'm2Normal'],
+    stark: ['stark gefüllt', 0.5, 'm2Stark'], messie: ['Messie-Wohnung', 0.8, 'm2Messie'] };  // Label, m³ je m², Flächenpreis
   let PREISE = null;
   let logoData = null;
 
@@ -152,14 +159,22 @@
         <label>Adresse des Objekts *<input id="oadr"></label>
         <label>Objektart<select id="oart"><option>Wohnung</option><option>Haus</option><option>Keller / Dachboden</option><option>Garage</option><option>Büro / Gewerbe</option><option>Sperrmüllabholung</option></select></label>
         <label>Fläche (m²)<input id="ofl" type="text" inputmode="decimal"></label>
-        <label>Wie voll ist es?<select id="ofg"><option value="0.1">fast leer</option><option value="0.3" selected>normal eingerichtet</option><option value="0.5">sehr voll</option><option value="0.8">extrem voll / Messie</option></select></label>
-        <label>Etage (0 = EG)<input id="oet" type="number" inputmode="numeric" value="0"></label></div>
+        <label>Wie voll ist es?<select id="ofg">${Object.entries(FUELLGRAD).map(([k, [l]]) => `<option value="${k}"${k === 'normal' ? ' selected' : ''}>${l}</option>`).join('')}</select></label>
+        <label>Etage (0 = EG)<input id="oet" type="number" inputmode="numeric" value="0"></label>
+        <label>Entfernung ab Deißlingen (km)<input id="okm" type="text" inputmode="decimal"></label></div>
         <label class="chk"><input type="checkbox" id="oauf"> Aufzug vorhanden</label>
-        <label class="chk"><input type="checkbox" id="otrag"> Trageweg über 20 m</label></div>
+        <label class="chk"><input type="checkbox" id="otrag"> Trageweg über 20 m</label>
+        <label class="chk"><input type="checkbox" id="ohalt"> Halteverbotszone nötig (${eur(K.halteverbot)})</label></div>
       <div class="card"><h2>Räumgut (geschätzt in m³)</h2><div class="grid">${FRAKTIONEN.map(([k, l]) => `<label>${l}<input type="text" inputmode="decimal" step="0.5" min="0" data-m3="${k}"></label>`).join('')}</div>
-        <p class="note"><b>Leer lassen</b> = die App schätzt die Menge aus Fläche und „Wie voll ist es?“. Sobald du hier Werte einträgst, wird damit gerechnet.</p><p class="note">Arbeit & Transport: ${eur(K.proM3)}/m³. Entsorgung wird je Abfallart nach den Preisen deines Entsorgers berechnet (Preisliste).</p><div id="entsinfo" class="note"></div></div>
+        <p class="note"><b>Leer lassen</b> = die App schätzt die Menge aus Fläche und „Wie voll ist es?“. Sobald du hier Werte einträgst, wird damit gerechnet. Die App vergleicht immer mit dem Flächenpreis (€/m²) und nimmt den höheren Wert.</p><p class="note">Arbeit & Transport: ${eur(K.proM3)}/m³. Entsorgung wird je Abfallart nach den Preisen deines Entsorgers berechnet (Preisliste).</p><div id="entsinfo" class="note"></div></div>
       <div class="card"><h2>Zusatzleistungen</h2>
         <label class="chk"><input type="checkbox" id="zk"> Küchendemontage (${eur(K.kueche)})</label>
+        <div class="grid"><label>Kühl-/Klimageräte (Stück, je ${eur(K.kuehlgeraet)})<input id="zkg" type="text" inputmode="numeric"></label>
+        <label>Schadstoffe: Farben, Lacke, Altöl, Batterien, Leuchtstoffröhren (Positionen, je ${eur(K.sonderPosition)})<input id="zsp" type="text" inputmode="numeric"></label>
+        <label>Big Bags 1 m³ inkl. Entsorgung (Stück, je ${eur(K.bigBag)})<input id="zbb" type="text" inputmode="numeric"></label>
+        <label>Zusatzarbeit nach Aufwand: Stunden<input id="zst" type="text" inputmode="decimal"></label>
+        <label>Zusatzarbeit: Arbeitskräfte<input id="zak" type="text" inputmode="numeric" value="2"></label></div>
+        <p class="note">Zusatzarbeit z. B. für verklebte Teppiche, Bodenbeläge, Tapeten, Garten, Hof oder Lager: ${eur(K.stundensatz)} je Stunde und Arbeitskraft. Asbest nur über eine Fachfirma.</p>
         <label class="chk"><input type="checkbox" id="ze"> Express innerhalb 48 h (+${K.expressProzent} %)</label>
         <label>Grundreinigung (m², ${eur(K.reinigungProM2)}/m²)<input id="zr" type="text" inputmode="decimal" min="0"></label>
         <p class="note">Besenreine Übergabe ist immer inklusive.</p></div>
@@ -191,31 +206,50 @@
       let geschaetzt = false;
       const fl = num(document.getElementById('ofl').value);
       if (m3 === 0 && fl > 0) {  // keine m³ erfasst → aus Fläche × Füllgrad schätzen, typische Aufteilung
-        m3 = Math.round(fl * num(document.getElementById('ofg').value) * 2) / 2;
+        m3 = Math.round(fl * (FUELLGRAD[document.getElementById('ofg').value] || FUELLGRAD.normal)[1] * 2) / 2;
         const anteil = { sperrmuell: 0.6, altholz: 0.2, metall: 0.05, elektro: 0.05, papier: 0.1 };
         mengen = FRAKTIONEN.map(([k]) => [k, m3 * (anteil[k] || 0)]);
         geschaetzt = true;
       }
       const et = Math.max(0, Math.floor(num(document.getElementById('oet').value)));
       const p = [];
-      p.push([`Räumung und Abtransport (ca. ${m3.toLocaleString('de-DE')} m³)`, m3 * K.proM3]);
+      let lohn = 0;  // Arbeits- und Fahrtkosten für § 35a EStG (ohne Entsorgung und Material)
       const ent = entsorgungskosten(mengen);
-      if (geschaetzt) ent.details.unshift(`Menge geschätzt aus ${fl.toLocaleString('de-DE')} m² × Füllgrad`);
-      if (ent.summe > 0) p.push(['Fachgerechte Entsorgung inkl. Entsorgungsgebühren', ent.summe]);
-      document.getElementById('entsinfo').innerHTML = ent.details.length ? 'Entsorgung (nur für dich): ' + ent.details.map(esc).join(' · ') : '';
-      if (!document.getElementById('oauf').checked && et >= 2) p.push([`Etagenzuschlag ohne Aufzug (${et}. OG)`, (et - 1) * K.etage]);
-      if (document.getElementById('otrag').checked) p.push(['Zuschlag Trageweg über 20 m', K.trageweg]);
-      if (document.getElementById('zk').checked) p.push(['Küchendemontage', K.kueche]);
-      const rm = num(document.getElementById('zr').value); if (rm > 0) p.push([`Grundreinigung (${rm.toLocaleString('de-DE')} m²)`, rm * K.reinigungProM2]);
+      const kosten = m3 * K.proM3 + ent.summe;
+      const buero = document.getElementById('oart').value === 'Büro / Gewerbe';
+      const fg = FUELLGRAD[document.getElementById('ofg').value] || FUELLGRAD.normal;
+      const flaechenpreis = fl > 0 ? fl * (buero ? K.m2Buero : K[fg[2]]) : 0;
+      const basis = Math.max(kosten, flaechenpreis);
+      if (basis > 0) {
+        p.push([`Räumung, Abtransport und fachgerechte Entsorgung (ca. ${m3.toLocaleString('de-DE')} m³${fl > 0 ? ', ' + fl.toLocaleString('de-DE') + ' m²' : ''})`, basis]);
+        lohn += basis - ent.summe;
+      }
+      if (geschaetzt) ent.details.unshift(`Menge geschätzt aus ${fl.toLocaleString('de-DE')} m² × ${fg[0]}`);
+      const info = [`Kosten: Arbeit ${eur(m3 * K.proM3)} + Entsorgung ${eur(ent.summe)} = ${eur(kosten)}`];
+      if (flaechenpreis > 0) info.push(`Flächenpreis ${buero ? 'Büro' : fg[0]}: ${eur(flaechenpreis)}`, `verwendet: ${flaechenpreis > kosten ? 'Flächenpreis' : 'Kosten'}`);
+      document.getElementById('entsinfo').innerHTML = 'Nur für dich: ' + info.concat(ent.details).map(esc).join(' · ');
+      const plus = (text, betrag, istLohn) => { if (betrag > 0) { p.push([text, betrag]); if (istLohn) lohn += betrag; } };
+      if (!document.getElementById('oauf').checked && et >= 1) plus(`Etagenzuschlag ohne Aufzug (${et}. OG, je Geschoss ${K.etageProzent} %)`, basis * et * K.etageProzent / 100, true);
+      if (document.getElementById('otrag').checked) plus('Zuschlag Trageweg über 20 m', K.trageweg, true);
+      if (document.getElementById('ohalt').checked) plus('Halteverbotszone (Genehmigung und Beschilderung)', K.halteverbot, false);
+      if (document.getElementById('zk').checked) plus('Küchendemontage', K.kueche, true);
+      const kg = Math.floor(num(document.getElementById('zkg').value)); plus(`Kühl- und Klimageräte, fachgerechte Entsorgung (${kg} Stück)`, kg * K.kuehlgeraet, false);
+      const sp = Math.floor(num(document.getElementById('zsp').value)); plus(`Schadstoffentsorgung (${sp} Position${sp === 1 ? '' : 'en'})`, sp * K.sonderPosition, false);
+      const bb = Math.floor(num(document.getElementById('zbb').value)); plus(`Big Bag 1 m³ inkl. Entsorgung (${bb} Stück)`, bb * K.bigBag, false);
+      const st = num(document.getElementById('zst').value), ak = Math.max(1, Math.floor(num(document.getElementById('zak').value)));
+      plus(`Zusatzarbeiten nach Aufwand (${st.toLocaleString('de-DE')} Std. × ${ak} Arbeitskräfte)`, st * ak * K.stundensatz, true);
+      const km = num(document.getElementById('okm').value);
+      plus(`Anfahrt (${km.toLocaleString('de-DE')} km, davon ${K.anfahrtFreiKm} km inklusive)`, Math.max(0, km - K.anfahrtFreiKm) * K.anfahrtProKm, true);
+      const rm = num(document.getElementById('zr').value); plus(`Grundreinigung (${rm.toLocaleString('de-DE')} m²)`, rm * K.reinigungProM2, true);
       let zwischen = p.reduce((s, x) => s + x[1], 0);
       const klein = document.getElementById('oart').value === 'Sperrmüllabholung';
       const minPreis = klein ? PREISE.ab.sperrmuellMin : K.mindestauftrag;
       if (zwischen < minPreis) { p.push([klein ? 'Aufrundung auf Mindestpreis Sperrmüllabholung' : 'Aufrundung auf Mindestauftrag', minPreis - zwischen]); zwischen = minPreis; }
-      if (document.getElementById('ze').checked) p.push([`Express-Zuschlag (${K.expressProzent} %)`, zwischen * K.expressProzent / 100]);
+      if (document.getElementById('ze').checked) { const ex = zwischen * K.expressProzent / 100; p.push([`Express-Zuschlag (${K.expressProzent} %)`, ex]); lohn += ex; }
       const wert = [...wertBox.querySelectorAll('.row')].map(r => [r.querySelector('.wb').value.trim(), num(r.querySelector('.wv').value)]).filter(([b, v]) => b || v);
       wert.forEach(([b, v]) => p.push([`Wertanrechnung: ${b || 'Gegenstand'}`, -v]));
       const summe = Math.max(0, p.reduce((s, x) => s + x[1], 0));
-      return { m3, posten: p, summe, wert };
+      return { m3, posten: p, summe, wert, lohn: Math.min(lohn, summe) };
     }
     function zeigeSumme() { const fp = num(document.getElementById('fp').value); document.getElementById('sumpreis').textContent = eur(fp); }
     function rechnen() {
@@ -225,7 +259,7 @@
       zeigeSumme();
     }
     $main.oninput = e => { if (e.target.id !== 'fp') rechnen(); };
-    $main.onchange = e => { if (e.target.id === 'oart' || e.target.id === 'ofg' || e.target.type === 'checkbox' && e.target.id !== 'ankunde' && e.target.id !== 'auftrag') rechnen(); };
+    $main.onchange = e => { if (e.target.id === 'oart' || e.target.id === 'ofg' || e.target.id === 'ofg' || e.target.type === 'checkbox' && e.target.id !== 'ankunde' && e.target.id !== 'auftrag') rechnen(); };
     rechnen();
 
     document.getElementById('senden').onclick = async () => {
@@ -237,7 +271,7 @@
       try {
         const r = posten(); const fp = num(v('fp'));
         const { nummer } = await api('nummer', { art: 'angebot' });
-        const d = { nummer, datum: heute(), kunde: { name: v('kname'), tel: v('ktel'), mail: v('kmail'), adr: v('kadr') },
+        const d = { lohn: r.lohn, nummer, datum: heute(), kunde: { name: v('kname'), tel: v('ktel'), mail: v('kmail'), adr: v('kadr') },
           objekt: { adr: v('oadr'), art: v('oart'), flaeche: v('ofl'), etage: v('oet'), aufzug: document.getElementById('oauf').checked },
           m3: Object.fromEntries(FRAKTIONEN.map(([k]) => [k, num(document.querySelector(`[data-m3="${k}"]`).value)])),
           posten: r.posten, berechnet: r.summe, festpreis: fp, gueltig: v('gueltig'), notiz: v('notiz'),
@@ -372,7 +406,8 @@
     P.platz(14); doc.setDrawColor(10, 29, 25); doc.line(P.x, P.y, 192, P.y); P.y += 7; doc.setFont('helvetica', 'bold'); doc.setFontSize(13);
     doc.text('Festpreis', P.x, P.y); doc.text(eur(d.festpreis), 192, P.y, { align: 'right' }); P.y += 5; doc.setFont('helvetica', 'normal'); doc.setFontSize(9);
     doc.text('Endpreis. Gemäß § 19 UStG wird keine Umsatzsteuer berechnet.', P.x, P.y); P.y += 8; doc.setFontSize(10);
-    P.text(`Das Angebot ist gültig bis ${d.gueltig}. Der Festpreis gilt für den besichtigten Umfang; zusätzliche Gegenstände oder Räume werden vorher mit Ihnen abgestimmt.`);
+    P.text(`Das Angebot ist gültig bis ${d.gueltig}. Der Festpreis gilt für den besichtigten Umfang; zusätzliche Gegenstände oder Räume werden vorher mit Ihnen abgestimmt. Asbesthaltige Materialien sind ausgenommen und müssen von einer Fachfirma entsorgt werden.`);
+    if (d.lohn > 0) { P.y += 2; P.text(`Steuertipp: Im Festpreis sind Arbeits- und Fahrtkosten von ca. ${eur(Math.min(d.lohn, d.festpreis))} enthalten. Davon können Sie 20 % als haushaltsnahe Dienstleistung nach § 35a EStG von Ihrer Steuer abziehen (höchstens 4.000 € im Jahr). Entsorgungskosten zählen nicht dazu.`); }
     if (d.notiz) { P.y += 3; P.abschnitt('Hinweise'); P.text(d.notiz); }
     await P.fotos(fotos);
     P.y += 4; P.abschnitt(d.auftrag ? 'Auftragserteilung' : 'Auftrag erteilen');
