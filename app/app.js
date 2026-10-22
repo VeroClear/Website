@@ -22,8 +22,6 @@
     ['reinigungProM2', 'Grundreinigung pro m² (€)'], ['expressProzent', 'Express-Zuschlag (%)']];
   const FUELLGRAD = { wenig: ['wenig Inventar', 0.15, 'm2Wenig'], normal: ['normal möbliert', 0.3, 'm2Normal'],
     stark: ['stark gefüllt', 0.5, 'm2Stark'], messie: ['Messie-Wohnung', 0.8, 'm2Messie'] };  // Label, m³ je m², Flächenpreis
-  const FIRMA_FELDER = [['steuernummer', 'Steuernummer'], ['kontoinhaber', 'Kontoinhaber'], ['iban', 'IBAN'], ['bic', 'BIC'],
-    ['bank', 'Bank'], ['zahlungsziel', 'Zahlungsziel (Tage)']];
   let PREISE = null;
   let logoData = null;
 
@@ -47,7 +45,7 @@
 
   function seite(html) { $main.oninput = null; $main.onchange = null; $main.innerHTML = html; window.scrollTo(0, 0); }
   const zurueck = '<button class="back" data-go="home">← Übersicht</button>';
-  $main.addEventListener('click', e => { const g = e.target.closest('[data-go]'); if (g) { e.preventDefault(); ({ home, preise: preisSeite, besichtigung, uebergabe, rechnung, archiv })[g.dataset.go](); } });
+  $main.addEventListener('click', e => { const g = e.target.closest('[data-go]'); if (g) { e.preventDefault(); ({ home, preise: preisSeite, besichtigung, uebergabe, archiv })[g.dataset.go](); } });
 
   // ── Start / Login ──
   async function start() {
@@ -78,9 +76,8 @@
     seite(`<h1>Hallo Luca 👋</h1><div class="tiles">
       <button class="tile" data-go="besichtigung">📝 Besichtigung<small>Aufnahme vor Ort → Festpreis-Angebot als PDF</small></button>
       <button class="tile" data-go="uebergabe">✅ Übergabe<small>Übergabeprotokoll mit Unterschrift</small></button>
-      <button class="tile" data-go="rechnung">🧾 Rechnung<small>Rechnung aus Angebot oder neu, als PDF per E-Mail</small></button>
-      <button class="tile" data-go="preise">💶 Preisliste<small>Preise, Entsorgung, Bankdaten</small></button>
-      <button class="tile" data-go="archiv">📁 Archiv<small>Angebote, Rechnungen, Protokolle</small></button></div>`);
+      <button class="tile" data-go="preise">💶 Preisliste<small>Preise und Entsorgungskosten pflegen</small></button>
+      <button class="tile" data-go="archiv">📁 Archiv<small>Alle Angebote und Protokolle</small></button></div>`);
   }
 
   // ── Preisliste ──
@@ -94,13 +91,10 @@
         <p class="note">Netto-Preise wie auf der Liste des Entsorgers eintragen – die App rechnet 19 % MwSt drauf, weil du sie als Kleinunternehmer nicht zurückbekommst. Metall bringt dir Geld (Vergütung) und wird daher mit 0 € angesetzt.</p></div>
       <div class="card"><h2>Kalkulation (nur für dich, für Angebote)</h2><div class="grid">${KALK_FELDER.map(f => feld('kalkulation', f)).join('')}</div>
       <p class="note">Auf der Website stehen keine Preise – Kunden bekommen ihren Festpreis nach der Besichtigung.</p><p class="note">Zuletzt gespeichert: ${PREISE.aktualisiert ? new Date(PREISE.aktualisiert).toLocaleString('de-DE') : 'noch nie (Standardwerte)'}</p></div>
-      <div class="card"><h2>Firmen- und Bankdaten (für Rechnungen)</h2><div class="grid">${FIRMA_FELDER.map(([k, l]) => `<label>${l}<input data-f="${k}" value="${esc((PREISE.firma || {})[k] ?? '')}"></label>`).join('')}</div>
-        <p class="note">Die Steuernummer bekommst du vom Finanzamt nach der Anmeldung. Ohne Steuernummer ist eine Rechnung nicht vollständig.</p></div>
       <div id="msg"></div><button class="btn" id="save">Speichern</button>`);
     document.getElementById('save').onclick = async () => {
-      const neu = { ab: {}, kalkulation: {}, entsorgung: {}, dichte: {}, firma: {} };
+      const neu = { ab: {}, kalkulation: {}, entsorgung: {}, dichte: {}, firma: (PREISE.firma || {}) };
       document.querySelectorAll('[data-g]').forEach(i => { neu[i.dataset.g][i.dataset.k] = num(i.value); });
-      document.querySelectorAll('[data-f]').forEach(i => { neu.firma[i.dataset.f] = i.value.trim(); });
       const msg = document.getElementById('msg');
       try { PREISE = (await api('preise_speichern', neu)).preise; msg.innerHTML = '<p class="ok">Gespeichert.</p>'; }
       catch (e) { msg.innerHTML = `<p class="err">${esc(e.message)}</p>`; }
@@ -361,98 +355,6 @@
         fertig(nummer, res.gesendet, pdf);
       } catch (e) { msg.innerHTML = `<p class="err">${esc(e.message)}</p>`; btn.disabled = false; btn.textContent = 'Protokoll erstellen'; }
     };
-  }
-
-  // ── Rechnung ──
-  async function rechnung() {
-    let angebote = [];
-    try { angebote = (await api('liste')).protokolle.filter(p => p.art === 'Angebot'); } catch (e) { /* ohne Vorlage */ }
-    const F = PREISE.firma || {}, ziel = Math.max(0, Math.floor(num(F.zahlungsziel || 14)));
-    seite(`${zurueck}<h1>Rechnung</h1>
-      ${!F.steuernummer || !F.iban ? '<div class="card"><p class="err">Steuernummer oder IBAN fehlt noch – bitte unter „Preisliste“ eintragen.</p></div>' : ''}
-      <div class="card"><label>Aus Angebot übernehmen<select id="vorlage"><option value="">– neu –</option>${angebote.map((a, i) => `<option value="${i}">${esc(a.nummer)} · ${esc(a.kunde)} · ${a.betrag != null ? eur(a.betrag) : ''}</option>`).join('')}</select></label></div>
-      <div class="card"><h2>Rechnungsempfänger</h2><div class="grid">
-        <label>Name / Firma *<input id="kname"></label><label>E-Mail<input id="kmail" type="email"></label>
-        <label class="breit">Anschrift *<textarea id="kadr" rows="2" placeholder="Straße Hausnummer, PLZ Ort"></textarea></label></div></div>
-      <div class="card"><h2>Angaben</h2><div class="grid">
-        <label>Rechnungsdatum<input id="rdat" value="${heute()}"></label>
-        <label>Leistungsdatum *<input id="ldat" placeholder="z. B. ${heute()}"></label>
-        <label class="breit">Ort der Leistung<input id="lort"></label>
-        <label>Bezug (Angebots-Nr.)<input id="bezug"></label>
-        <label>Zahlungsziel (Tage)<input id="ziel" type="text" inputmode="numeric" value="${ziel}"></label></div></div>
-      <div class="card"><h2>Positionen</h2><div id="pos"></div><button class="btn sec small" id="padd">+ Position</button>
-        <label style="margin-top:12px">Davon Arbeits- und Fahrtkosten (§ 35a EStG, €)<input id="lohn" type="text" inputmode="decimal"></label>
-        <p class="note">Der Kunde kann 20 % der Arbeits- und Fahrtkosten von der Steuer abziehen, wenn er überweist (nicht bar).</p></div>
-      <div class="card"><label class="chk"><input type="checkbox" id="ankunde" checked> PDF per E-Mail an den Kunden senden (Kopie geht immer an dich)</label><div id="msg"></div></div>
-      <div class="sum"><div><div class="note" style="color:#9fb5ad">Rechnungsbetrag</div><div class="preis" id="sumpreis">–</div></div><button class="btn" id="senden">Rechnung erstellen</button></div>`);
-    const posBox = document.getElementById('pos');
-    const zeile = (b = '', m = 1, ep = '') => { const d = document.createElement('div'); d.className = 'row'; d.style.gridTemplateColumns = '1fr 60px 100px 40px';
-      d.innerHTML = `<label>Beschreibung<input class="pb" value="${esc(b)}"></label><label>Menge<input class="pm" type="text" inputmode="decimal" value="${m}"></label><label>Einzelpreis €<input class="pe" type="text" inputmode="decimal" value="${ep === '' ? '' : Math.round(ep * 100) / 100}"></label><button class="x">×</button>`;
-      d.querySelector('.x').onclick = () => { d.remove(); summe(); }; posBox.append(d); };
-    const positionen = () => [...posBox.querySelectorAll('.row')].map(r => [r.querySelector('.pb').value.trim(), num(r.querySelector('.pm').value), num(r.querySelector('.pe').value)]).filter(([b, m, e]) => b || e);
-    const summe = () => { const s = positionen().reduce((t, [, m, e]) => t + m * e, 0); document.getElementById('sumpreis').textContent = eur(s); return s; };
-    zeile();
-    document.getElementById('padd').onclick = () => zeile();
-    $main.oninput = () => summe(); $main.onchange = null;
-    const setv = (id, v) => { document.getElementById(id).value = v || ''; };
-    document.getElementById('vorlage').onchange = e => {
-      const a = angebote[e.target.value]; if (!a) return; const d = a.daten || {};
-      setv('kname', a.kunde); setv('kmail', a.email); setv('kadr', (d.kunde && d.kunde.adr) || ''); setv('lort', a.objekt); setv('bezug', a.nummer);
-      posBox.innerHTML = '';
-      const posten = (d.posten || []).filter(([, v]) => v);
-      if (posten.length) {
-        posten.forEach(([b, v]) => zeile(b, 1, v));
-        const diff = (d.festpreis ?? a.betrag) - posten.reduce((t, [, v]) => t + v, 0);
-        if (Math.abs(diff) >= 0.01) zeile(diff < 0 ? 'Nachlass' : 'Rundung', 1, diff);
-      } else zeile(`Räumung, Abtransport und fachgerechte Entsorgung laut Angebot ${a.nummer}`, 1, a.betrag || 0);
-      setv('lohn', d.lohn ? Math.round(Math.min(d.lohn, d.festpreis ?? a.betrag) * 100) / 100 : '');
-      summe();
-    };
-    document.getElementById('senden').onclick = async () => {
-      const msg = document.getElementById('msg'); const v = id => document.getElementById(id).value.trim().replace(/\s*\n+\s*/g, ', ');
-      const pos = positionen();
-      if (!v('kname') || !v('kadr') || !v('ldat') || !pos.length) { msg.innerHTML = '<p class="err">Bitte Name, Anschrift, Leistungsdatum und mindestens eine Position ausfüllen.</p>'; return; }
-      const btn = document.getElementById('senden'); btn.disabled = true; btn.textContent = 'Wird erstellt …';
-      try {
-        const betrag = summe(); const tage = Math.max(0, Math.floor(num(v('ziel'))));
-        const { nummer } = await api('nummer', { art: 'rechnung' });
-        const faellig = (() => { const d = new Date(); d.setDate(d.getDate() + tage); return d.toLocaleDateString('de-DE'); })();
-        const d = { nummer, rdat: v('rdat'), ldat: v('ldat'), lort: v('lort'), bezug: v('bezug'), kunde: { name: v('kname'), mail: v('kmail'), adr: v('kadr') },
-          pos, betrag, lohn: Math.min(num(v('lohn')), betrag), faellig, tage };
-        const pdf = await rechnungPdf(d);
-        const res = await api('speichern', { nummer, pdf, kunde: d.kunde.name, email: d.kunde.mail, telefon: '', objekt: d.lort || d.kunde.adr, betrag,
-          anKunde: document.getElementById('ankunde').checked, daten: { bezug: d.bezug, faellig, ldat: d.ldat } });
-        fertig(nummer, res.gesendet, pdf);
-      } catch (e) { msg.innerHTML = `<p class="err">${esc(e.message)}</p>`; btn.disabled = false; btn.textContent = 'Rechnung erstellen'; }
-    };
-  }
-
-  async function rechnungPdf(d) {
-    await logo();
-    const F = PREISE.firma || {};
-    const P = neuesPdf('Rechnung', d.nummer); const doc = P.doc; P.kopf();
-    doc.setFontSize(8); doc.setTextColor(91, 107, 102); doc.text(`VeroClear · ${FIRMA.strasse} · ${FIRMA.ort}`, P.x, P.y); doc.setTextColor(10, 29, 25);
-    doc.setFontSize(11); doc.text([d.kunde.name, ...doc.splitTextToSize(d.kunde.adr, 85)], P.x, P.y + 6);
-    doc.setFontSize(10);
-    [['Rechnungs-Nr.', d.nummer], ['Rechnungsdatum', d.rdat], ['Leistungsdatum', d.ldat], ['Angebot', d.bezug]].filter(([, w]) => w)
-      .forEach(([k, w], i) => { doc.setTextColor(91, 107, 102); doc.text(k, 130, P.y + 6 + i * 5.5); doc.setTextColor(10, 29, 25); doc.text(String(w), 192, P.y + 6 + i * 5.5, { align: 'right' }); });
-    P.y += 36; doc.setFont('helvetica', 'bold'); doc.setFontSize(16); doc.text('Rechnung', P.x, P.y); P.y += 7; doc.setFont('helvetica', 'normal'); doc.setFontSize(10);
-    if (d.lort) { P.text(`Leistungsort: ${d.lort}`); P.y += 2; }
-    P.text('Für unsere Leistungen berechnen wir Ihnen wie folgt:'); P.y += 3;
-    const kopfZeile = () => { doc.setFont('helvetica', 'bold'); doc.text('Pos.', P.x, P.y); doc.text('Beschreibung', P.x + 12, P.y); doc.text('Menge', 132, P.y, { align: 'right' }); doc.text('Einzelpreis', 162, P.y, { align: 'right' }); doc.text('Gesamt', 192, P.y, { align: 'right' }); doc.setFont('helvetica', 'normal'); doc.line(P.x, P.y + 2, 192, P.y + 2); P.y += 7; };
-    kopfZeile();
-    d.pos.forEach(([b, m, e], i) => { const z = doc.splitTextToSize(b || '–', 90); P.platz(z.length * 5 + 2); doc.text(String(i + 1), P.x, P.y); doc.text(z, P.x + 12, P.y);
-      doc.text(m.toLocaleString('de-DE'), 132, P.y, { align: 'right' }); doc.text(eur(e), 162, P.y, { align: 'right' }); doc.text(eur(m * e), 192, P.y, { align: 'right' }); P.y += z.length * 5 + 1.5; });
-    P.platz(16); doc.setDrawColor(10, 29, 25); doc.line(P.x, P.y, 192, P.y); P.y += 7; doc.setFont('helvetica', 'bold'); doc.setFontSize(13);
-    doc.text('Rechnungsbetrag', P.x, P.y); doc.text(eur(d.betrag), 192, P.y, { align: 'right' }); P.y += 5; doc.setFont('helvetica', 'normal'); doc.setFontSize(9);
-    doc.text('Gemäß § 19 UStG wird keine Umsatzsteuer berechnet.', P.x, P.y); P.y += 9; doc.setFontSize(10);
-    if (d.lohn > 0) { P.text(`Im Rechnungsbetrag sind Arbeits- und Fahrtkosten in Höhe von ${eur(d.lohn)} enthalten (haushaltsnahe Dienstleistung nach § 35a EStG). Die Steuerermäßigung setzt eine Zahlung per Überweisung voraus.`); P.y += 3; }
-    P.abschnitt('Zahlung');
-    P.text(`Bitte überweisen Sie den Rechnungsbetrag ${d.tage ? 'bis zum ' + d.faellig : 'sofort'} ohne Abzug unter Angabe der Rechnungsnummer ${d.nummer}.`); P.y += 2;
-    P.paare([['Kontoinhaber', F.kontoinhaber || 'Luca De Caro'], ['IBAN', F.iban], ['BIC', F.bic], ['Bank', F.bank], ['Verwendungszweck', d.nummer]]);
-    P.y += 2; P.text('Vielen Dank für Ihren Auftrag!');
-    P.fuss();
-    return doc.output('datauristring');
   }
 
   // ── Archiv ──
