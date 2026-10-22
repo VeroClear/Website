@@ -56,7 +56,7 @@ function standardPreise(): array
                           'm2Wenig' => 18, 'm2Normal' => 24, 'm2Stark' => 33, 'm2Messie' => 46, 'm2Buero' => 15,
                           'etageProzent' => 7, 'trageweg' => 50, 'halteverbot' => 120, 'kueche' => 250,
                           'kuehlgeraet' => 30, 'sonderPosition' => 150, 'bigBag' => 150, 'stundensatz' => 50,
-                          'anfahrtFreiKm' => 30, 'anfahrtProKm' => 1.5, 'reinigungProM2' => 3, 'expressProzent' => 15],
+                          'spritpreis' => 2.25, 'verbrauch' => 10, 'reinigungProM2' => 3, 'expressProzent' => 15],
         // Netto-Preise Entsorger Deißlingen (€/t), Stand Okt. 2026; Metall = Vergütung, daher 0
         'entsorgung' => ['sperrmuell' => 295, 'altholz' => 102, 'altholzA4' => 152, 'metall' => 0, 'elektro' => 200,
                          'papier' => 0, 'uebernahmeschein' => 20],

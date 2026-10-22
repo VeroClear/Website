@@ -18,7 +18,7 @@
     ['halteverbot', 'Halteverbotszone beantragen (€)'], ['kueche', 'Küchendemontage (€)'],
     ['kuehlgeraet', 'Kühl-/Klimagerät je Stück (€)'], ['sonderPosition', 'Schadstoffe je Position (€)'],
     ['bigBag', 'Big Bag 1 m³ inkl. Entsorgung (€)'], ['stundensatz', 'Stundensatz je Arbeitskraft (€)'],
-    ['anfahrtFreiKm', 'Anfahrt kostenlos bis (km)'], ['anfahrtProKm', 'Anfahrt je weiteren km (€)'],
+    ['spritpreis', 'Dieselpreis aktuell (€ je Liter)'], ['verbrauch', 'Verbrauch Transporter (Liter je 100 km)'],
     ['reinigungProM2', 'Grundreinigung pro m² (€)'], ['expressProzent', 'Express-Zuschlag (%)']];
   const FUELLGRAD = { wenig: ['wenig Inventar', 0.15, 'm2Wenig'], normal: ['normal möbliert', 0.3, 'm2Normal'],
     stark: ['stark gefüllt', 0.5, 'm2Stark'], messie: ['Messie-Wohnung', 0.8, 'm2Messie'] };  // Label, m³ je m², Flächenpreis
@@ -161,11 +161,15 @@
         <label>Fläche (m²)<input id="ofl" type="text" inputmode="decimal"></label>
         <label>Wie voll ist es?<select id="ofg">${Object.entries(FUELLGRAD).map(([k, [l]]) => `<option value="${k}"${k === 'normal' ? ' selected' : ''}>${l}</option>`).join('')}</select></label>
         <label>Etage (0 = EG)<input id="oet" type="number" inputmode="numeric" value="0"></label>
-        <label>Entfernung ab Deißlingen (km)<input id="okm" type="text" inputmode="decimal"></label></div>
+        <label>Entfernung ab Deißlingen (km, einfache Strecke)<input id="okm" type="text" inputmode="decimal"></label>
+        <label>Fahrten hin und zurück<input id="ofa" type="text" inputmode="numeric" value="1"></label></div>
         <label class="chk"><input type="checkbox" id="oauf"> Aufzug vorhanden</label>
         <label class="chk"><input type="checkbox" id="otrag"> Trageweg über 20 m</label>
         <label class="chk"><input type="checkbox" id="ohalt"> Halteverbotszone nötig (${eur(K.halteverbot)})</label></div>
-      <div class="card"><h2>Räumgut (geschätzt in m³)</h2><div class="grid">${FRAKTIONEN.map(([k, l]) => `<label>${l}<input type="text" inputmode="decimal" step="0.5" min="0" data-m3="${k}"></label>`).join('')}</div>
+      <div class="card"><h2>Räumgut</h2>
+        <label style="max-width:260px">Eingabe in<select id="einheit"><option value="kg" selected>Kilogramm (kg) – wie beim Entsorger</option><option value="m3">Kubikmeter (m³)</option></select></label>
+        <div class="grid" style="margin-top:10px">${FRAKTIONEN.map(([k, l]) => `<label>${l} <span class="einh">kg</span><input type="text" inputmode="decimal" min="0" data-m3="${k}"></label>`).join('')}</div>
+        <p class="note">Richtwerte: Sofa 40–60 kg · Kleiderschrank 60–100 kg · Bett mit Matratze 50–80 kg · Matratze 15–25 kg · Tisch 20–40 kg · Stuhl 5–8 kg · Waschmaschine 70 kg · Kühlschrank 40–60 kg · Fernseher 10–20 kg · voller Umzugskarton 15–20 kg · Teppich 10–30 kg. Nach jeder Fuhre kannst du mit dem Wiegeschein von Schuler vergleichen.</p>
         <p class="note"><b>Leer lassen</b> = die App schätzt die Menge aus Fläche und „Wie voll ist es?“. Sobald du hier Werte einträgst, wird damit gerechnet. Die App vergleicht immer mit dem Flächenpreis (€/m²) und nimmt den höheren Wert.</p><p class="note">Arbeit & Transport: ${eur(K.proM3)}/m³. Entsorgung wird je Abfallart nach den Preisen deines Entsorgers berechnet (Preisliste).</p><div id="entsinfo" class="note"></div></div>
       <div class="card"><h2>Zusatzleistungen</h2>
         <label class="chk"><input type="checkbox" id="zk"> Küchendemontage (${eur(K.kueche)})</label>
@@ -201,7 +205,9 @@
     document.getElementById('fp').oninput = () => { fpManuell = true; zeigeSumme(); };
 
     function posten() {
-      let mengen = FRAKTIONEN.map(([k]) => [k, num(document.querySelector(`[data-m3="${k}"]`).value)]);
+      const D = PREISE.dichte, inKg = document.getElementById('einheit').value === 'kg';
+      // intern wird in m³ gerechnet: kg ÷ 1000 = t, t ÷ (t je m³) = m³
+      let mengen = FRAKTIONEN.map(([k]) => { const v = num(document.querySelector(`[data-m3="${k}"]`).value); return [k, inKg ? (D[k] > 0 ? v / 1000 / D[k] : 0) : v]; });
       let m3 = mengen.reduce((s, [, v]) => s + v, 0);
       let geschaetzt = false;
       const fl = num(document.getElementById('ofl').value);
@@ -215,17 +221,18 @@
       const p = [];
       let lohn = 0;  // Arbeits- und Fahrtkosten für § 35a EStG (ohne Entsorgung und Material)
       const ent = entsorgungskosten(mengen);
+      const kgGesamt = mengen.reduce((s, [k, v]) => s + v * D[k] * 1000, 0);
       const kosten = m3 * K.proM3 + ent.summe;
       const buero = document.getElementById('oart').value === 'Büro / Gewerbe';
       const fg = FUELLGRAD[document.getElementById('ofg').value] || FUELLGRAD.normal;
       const flaechenpreis = fl > 0 ? fl * (buero ? K.m2Buero : K[fg[2]]) : 0;
       const basis = Math.max(kosten, flaechenpreis);
       if (basis > 0) {
-        p.push([`Räumung, Abtransport und fachgerechte Entsorgung (ca. ${m3.toLocaleString('de-DE')} m³${fl > 0 ? ', ' + fl.toLocaleString('de-DE') + ' m²' : ''})`, basis]);
+        p.push([`Räumung, Abtransport und fachgerechte Entsorgung (ca. ${Math.round(kgGesamt / 10) * 10 >= 1000 ? (Math.round(kgGesamt / 100) / 10).toLocaleString('de-DE') + ' t' : Math.round(kgGesamt).toLocaleString('de-DE') + ' kg'}${fl > 0 ? ', ' + fl.toLocaleString('de-DE') + ' m²' : ''})`, basis]);
         lohn += basis - ent.summe;
       }
       if (geschaetzt) ent.details.unshift(`Menge geschätzt aus ${fl.toLocaleString('de-DE')} m² × ${fg[0]}`);
-      const info = [`Kosten: Arbeit ${eur(m3 * K.proM3)} + Entsorgung ${eur(ent.summe)} = ${eur(kosten)}`];
+      const info = [`Gesamtgewicht ca. ${Math.round(kgGesamt).toLocaleString('de-DE')} kg (≈ ${(Math.round(m3 * 10) / 10).toLocaleString('de-DE')} m³)`, `Kosten: Arbeit ${eur(m3 * K.proM3)} + Entsorgung ${eur(ent.summe)} = ${eur(kosten)}`];
       if (flaechenpreis > 0) info.push(`Flächenpreis ${buero ? 'Büro' : fg[0]}: ${eur(flaechenpreis)}`, `verwendet: ${flaechenpreis > kosten ? 'Flächenpreis' : 'Kosten'}`);
       document.getElementById('entsinfo').innerHTML = 'Nur für dich: ' + info.concat(ent.details).map(esc).join(' · ');
       const plus = (text, betrag, istLohn) => { if (betrag > 0) { p.push([text, betrag]); if (istLohn) lohn += betrag; } };
@@ -238,8 +245,9 @@
       const bb = Math.floor(num(document.getElementById('zbb').value)); plus(`Big Bag 1 m³ inkl. Entsorgung (${bb} Stück)`, bb * K.bigBag, false);
       const st = num(document.getElementById('zst').value), ak = Math.max(1, Math.floor(num(document.getElementById('zak').value)));
       plus(`Zusatzarbeiten nach Aufwand (${st.toLocaleString('de-DE')} Std. × ${ak} Arbeitskräfte)`, st * ak * K.stundensatz, true);
-      const km = num(document.getElementById('okm').value);
-      plus(`Anfahrt (${km.toLocaleString('de-DE')} km, davon ${K.anfahrtFreiKm} km inklusive)`, Math.max(0, km - K.anfahrtFreiKm) * K.anfahrtProKm, true);
+      const km = num(document.getElementById('okm').value), fa = Math.max(1, Math.floor(num(document.getElementById('ofa').value)));
+      const proKm = K.verbrauch / 100 * K.spritpreis;  // Spritkosten je gefahrenem km
+      plus(`Fahrtkosten (${km.toLocaleString('de-DE')} km × 2 × ${fa} Fahrt${fa === 1 ? '' : 'en'})`, km * 2 * fa * proKm, true);
       const rm = num(document.getElementById('zr').value); plus(`Grundreinigung (${rm.toLocaleString('de-DE')} m²)`, rm * K.reinigungProM2, true);
       let zwischen = p.reduce((s, x) => s + x[1], 0);
       const klein = document.getElementById('oart').value === 'Sperrmüllabholung';
@@ -249,7 +257,7 @@
       const wert = [...wertBox.querySelectorAll('.row')].map(r => [r.querySelector('.wb').value.trim(), num(r.querySelector('.wv').value)]).filter(([b, v]) => b || v);
       wert.forEach(([b, v]) => p.push([`Wertanrechnung: ${b || 'Gegenstand'}`, -v]));
       const summe = Math.max(0, p.reduce((s, x) => s + x[1], 0));
-      return { m3, posten: p, summe, wert, lohn: Math.min(lohn, summe) };
+      return { m3, mengen, posten: p, summe, wert, lohn: Math.min(lohn, summe) };
     }
     function zeigeSumme() { const fp = num(document.getElementById('fp').value); document.getElementById('sumpreis').textContent = eur(fp); }
     function rechnen() {
@@ -259,7 +267,13 @@
       zeigeSumme();
     }
     $main.oninput = e => { if (e.target.id !== 'fp') rechnen(); };
-    $main.onchange = e => { if (e.target.id === 'oart' || e.target.id === 'ofg' || e.target.id === 'ofg' || e.target.type === 'checkbox' && e.target.id !== 'ankunde' && e.target.id !== 'auftrag') rechnen(); };
+    // Einheit wechseln: vorhandene Werte umrechnen (kg ↔ m³)
+    document.getElementById('einheit').addEventListener('change', e => {
+      const zuKg = e.target.value === 'kg', D = PREISE.dichte;
+      document.querySelectorAll('[data-m3]').forEach(i => { const k = i.dataset.m3, v = num(i.value); if (v) i.value = zuKg ? Math.round(v * D[k] * 1000) : Math.round(v / 1000 / D[k] * 10) / 10; });
+      document.querySelectorAll('.einh').forEach(x => { x.textContent = zuKg ? 'kg' : 'm³'; });
+    });
+    $main.onchange = e => { if (e.target.id === 'oart' || e.target.id === 'ofg' || e.target.id === 'einheit' || e.target.type === 'checkbox' && e.target.id !== 'ankunde' && e.target.id !== 'auftrag') rechnen(); };
     rechnen();
 
     document.getElementById('senden').onclick = async () => {
@@ -273,7 +287,7 @@
         const { nummer } = await api('nummer', { art: 'angebot' });
         const d = { lohn: r.lohn, nummer, datum: heute(), kunde: { name: v('kname'), tel: v('ktel'), mail: v('kmail'), adr: v('kadr') },
           objekt: { adr: v('oadr'), art: v('oart'), flaeche: v('ofl'), etage: v('oet'), aufzug: document.getElementById('oauf').checked },
-          m3: Object.fromEntries(FRAKTIONEN.map(([k]) => [k, num(document.querySelector(`[data-m3="${k}"]`).value)])),
+          m3: Object.fromEntries(r.mengen.map(([k, v]) => [k, Math.round(v * 100) / 100])),
           posten: r.posten, berechnet: r.summe, festpreis: fp, gueltig: v('gueltig'), notiz: v('notiz'),
           auftrag: document.getElementById('auftrag').checked, unterschrift: sig.bild() };
         const pdf = await angebotPdf(d, fotos);
