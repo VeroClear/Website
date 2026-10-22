@@ -11,7 +11,7 @@
     ['wohnung40', 'Wohnung bis 40 m²'], ['wohnung60', 'Wohnung bis 60 m²'], ['wohnung80', 'Wohnung bis 80 m²'],
     ['wohnung100', 'Wohnung bis 100 m²'], ['haus', 'Haus ab 100 m²'], ['buero', 'Büro / Gewerbe'],
     ['sperrmuellM3', 'Sperrmüllabholung: € pro m³ (inkl. Entsorgung)'], ['sperrmuellMin', 'Sperrmüllabholung: Mindestpreis (€)']];
-  const KALK_FELDER = [['proM3', 'Arbeit & Transport pro m³ (€, ohne Entsorgung)'], ['mindestauftrag', 'Mindestauftrag (€)'],
+  const KALK_FELDER = [['proM3', 'Arbeit & Transport pro m³ (€, ohne Entsorgung)'], ['mindestauftrag', 'Mindestauftrag (€, 0 = aus)'],
     ['m2Wenig', 'Flächenpreis wenig Inventar (€/m²)'], ['m2Normal', 'Flächenpreis normal möbliert (€/m²)'],
     ['m2Stark', 'Flächenpreis stark gefüllt (€/m²)'], ['m2Messie', 'Flächenpreis Messie (€/m²)'], ['m2Buero', 'Flächenpreis Büro / Laden (€/m²)'],
     ['etageProzent', 'Etage ohne Aufzug: Zuschlag je Geschoss (%)'], ['trageweg', 'Zuschlag Trageweg > 20 m (€)'],
@@ -252,7 +252,8 @@
       let zwischen = p.reduce((s, x) => s + x[1], 0);
       const klein = document.getElementById('oart').value === 'Sperrmüllabholung';
       const minPreis = klein ? PREISE.ab.sperrmuellMin : K.mindestauftrag;
-      if (zwischen < minPreis) { p.push([klein ? 'Aufrundung auf Mindestpreis Sperrmüllabholung' : 'Aufrundung auf Mindestauftrag', minPreis - zwischen]); zwischen = minPreis; }
+      // Mindestpreis erst, wenn etwas eingetragen ist; 0 in der Preisliste = aus
+      if (zwischen > 0 && zwischen < minPreis) { p.push([klein ? 'Aufrundung auf Mindestpreis Sperrmüllabholung' : 'Aufrundung auf Mindestauftrag', minPreis - zwischen]); zwischen = minPreis; }
       if (document.getElementById('ze').checked) { const ex = zwischen * K.expressProzent / 100; p.push([`Express-Zuschlag (${K.expressProzent} %)`, ex]); lohn += ex; }
       const wert = [...wertBox.querySelectorAll('.row')].map(r => [r.querySelector('.wb').value.trim(), num(r.querySelector('.wv').value)]).filter(([b, v]) => b || v);
       wert.forEach(([b, v]) => p.push([`Wertanrechnung: ${b || 'Gegenstand'}`, -v]));

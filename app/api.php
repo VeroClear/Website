@@ -51,7 +51,7 @@ function standardPreise(): array
         'ab' => ['keller' => 290, 'garage' => 360, 'dachboden' => 450, 'wohnung40' => 720, 'wohnung60' => 1080,
                  'wohnung80' => 1440, 'wohnung100' => 1800, 'haus' => 2430, 'buero' => 1500,
                  'sperrmuellM3' => 95, 'sperrmuellMin' => 149],
-        'kalkulation' => ['proM3' => 30, 'mindestauftrag' => 290,
+        'kalkulation' => ['proM3' => 30, 'mindestauftrag' => 0,
                           // Flächenpreise je Füllgrad (Marktmitte), Vergleich zur Kostenrechnung
                           'm2Wenig' => 18, 'm2Normal' => 24, 'm2Stark' => 33, 'm2Messie' => 46, 'm2Buero' => 15,
                           'etageProzent' => 7, 'trageweg' => 50, 'halteverbot' => 120, 'kueche' => 250,
