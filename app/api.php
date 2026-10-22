@@ -63,6 +63,7 @@ function standardPreise(): array
         // geschätztes Gewicht lose geladen (t/m³)
         'dichte' => ['sperrmuell' => 0.18, 'altholz' => 0.25, 'altholzA4' => 0.3, 'metall' => 0.25, 'elektro' => 0.2,
                      'papier' => 0.08],
+        'firma' => ['steuernummer' => '', 'kontoinhaber' => 'Luca De Caro', 'iban' => '', 'bic' => '', 'bank' => '', 'zahlungsziel' => '14'],
         'aktualisiert' => null,
     ];
 }
@@ -135,6 +136,10 @@ if ($aktion === 'preise_speichern') {
             $neu[$gruppe][$k] = round((float) $v, 2);
         }
     }
+    foreach ($neu['firma'] as $k => $_) {
+        $v = preg_replace('/[\x00-\x1F\x7F]/u', '', (string) ($e['firma'][$k] ?? ''));
+        $neu['firma'][$k] = mb_substr(trim($v), 0, 80);
+    }
     $neu['aktualisiert'] = date('c');
     schreiben('preise.json', $neu);
     antwort(200, ['ok' => true, 'preise' => $neu]);
@@ -146,7 +151,7 @@ if ($aktion === 'liste') {
 }
 
 if ($aktion === 'nummer') {
-    $art = ($e['art'] ?? '') === 'uebergabe' ? 'Ü' : 'A';
+    $art = ['uebergabe' => 'Ü', 'rechnung' => 'R'][$e['art'] ?? ''] ?? 'A';
     $z = lesen('zaehler.json', []);
     $key = $art . date('Y');
     $z[$key] = ($z[$key] ?? 0) + 1;
@@ -156,7 +161,7 @@ if ($aktion === 'nummer') {
 
 if ($aktion === 'speichern') {
     $nr = (string) ($e['nummer'] ?? '');
-    if (!preg_match('/^[AÜ]-\d{4}-\d{4}$/u', $nr)) antwort(422, ['ok' => false, 'error' => 'Ungültige Nummer']);
+    if (!preg_match('/^[AÜR]-\d{4}-\d{4}$/u', $nr)) antwort(422, ['ok' => false, 'error' => 'Ungültige Nummer']);
     $pdf = base64_decode((string) preg_replace('#^data:application/pdf;[^,]*,#', '', (string) ($e['pdf'] ?? '')), true);
     if ($pdf === false || strncmp($pdf, '%PDF', 4) !== 0 || strlen($pdf) > MAX_PDF_BYTES) antwort(422, ['ok' => false, 'error' => 'PDF ungültig']);
     $datei = str_replace('Ü', 'U', $nr) . '.pdf';
@@ -164,7 +169,7 @@ if ($aktion === 'speichern') {
 
     $eintrag = [
         'nummer' => $nr,
-        'art' => str_starts_with($nr, 'Ü') ? 'Übergabe' : 'Angebot',
+        'art' => str_starts_with($nr, 'Ü') ? 'Übergabe' : (str_starts_with($nr, 'R') ? 'Rechnung' : 'Angebot'),
         'datum' => date('c'),
         'kunde' => mb_substr((string) ($e['kunde'] ?? ''), 0, 120),
         'email' => filter_var($e['email'] ?? '', FILTER_VALIDATE_EMAIL) ?: '',
@@ -197,7 +202,7 @@ if ($aktion === 'speichern') {
 
 if ($aktion === 'pdf') {
     $nr = (string) ($_GET['nr'] ?? '');
-    if (!preg_match('/^[AÜ]-\d{4}-\d{4}$/u', $nr)) antwort(422, ['ok' => false, 'error' => 'Ungültige Nummer']);
+    if (!preg_match('/^[AÜR]-\d{4}-\d{4}$/u', $nr)) antwort(422, ['ok' => false, 'error' => 'Ungültige Nummer']);
     $p = pfad('protokolle/' . str_replace('Ü', 'U', $nr) . '.pdf');
     if (!is_file($p)) antwort(404, ['ok' => false, 'error' => 'Nicht gefunden']);
     header('Content-Type: application/pdf');
@@ -214,11 +219,12 @@ function mailMitPdf(string $an, array $eintrag, string $pdf): void
     $cfg = is_file(SMTP_CONFIG) ? include SMTP_CONFIG : null;
     if (!is_array($cfg)) throw new RuntimeException('SMTP-Zugang fehlt');
     $art = $eintrag['art'];
-    $betreff = $art === 'Angebot' ? "Ihr Festpreis-Angebot {$eintrag['nummer']} – VeroClear" : "Übergabeprotokoll {$eintrag['nummer']} – VeroClear";
+    $betreff = ['Angebot' => "Ihr Festpreis-Angebot {$eintrag['nummer']} – VeroClear", 'Rechnung' => "Rechnung {$eintrag['nummer']} – VeroClear"][$art]
+        ?? "Übergabeprotokoll {$eintrag['nummer']} – VeroClear";
     $text = "Guten Tag" . ($eintrag['kunde'] ? " {$eintrag['kunde']}" : '') . ",\n\n"
-        . ($art === 'Angebot'
-            ? "vielen Dank für die Besichtigung. Im Anhang finden Sie unser Festpreis-Angebot {$eintrag['nummer']}.\n\n"
-            : "im Anhang finden Sie das Übergabeprotokoll {$eintrag['nummer']} zu Ihrem Auftrag.\n\n")
+        . (['Angebot' => "vielen Dank für die Besichtigung. Im Anhang finden Sie unser Festpreis-Angebot {$eintrag['nummer']}.\n\n",
+            'Rechnung' => "vielen Dank für Ihren Auftrag. Im Anhang finden Sie unsere Rechnung {$eintrag['nummer']}. Die Zahlungsdaten stehen auf der Rechnung.\n\n"][$art]
+            ?? "im Anhang finden Sie das Übergabeprotokoll {$eintrag['nummer']} zu Ihrem Auftrag.\n\n")
         . "Bei Fragen erreichen Sie uns unter +49 179 11 33 427 oder per Antwort auf diese E-Mail.\n\nViele Grüße\nVeroClear\nInhaber: Luca De Caro\nFriedrichstraße 10 · 78652 Deißlingen\nhttps://veroclear.de\n";
     $grenze = 'vc' . bin2hex(random_bytes(8));
     $kopf = [
