@@ -63,7 +63,7 @@ function standardPreise(): array
         // geschätztes Gewicht lose geladen (t/m³)
         'dichte' => ['sperrmuell' => 0.18, 'altholz' => 0.25, 'altholzA4' => 0.3, 'metall' => 0.25, 'elektro' => 0.2,
                      'papier' => 0.08],
-        'firma' => ['steuernummer' => '', 'kontoinhaber' => 'Luca De Caro', 'iban' => '', 'bic' => '', 'bank' => '', 'zahlungsziel' => '14'],
+        'firma' => ['steuernummer' => '', 'kontoinhaber' => 'Luca De Caro', 'iban' => '', 'bic' => '', 'bank' => '', 'zahlungsziel' => '14', 'ust' => 'klein'],
         'aktualisiert' => null,
     ];
 }

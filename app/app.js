@@ -22,6 +22,9 @@
     ['reinigungProM2', 'Grundreinigung pro m² (€)'], ['expressProzent', 'Express-Zuschlag (%)']];
   const FUELLGRAD = { wenig: ['wenig Inventar', 0.15, 'm2Wenig'], normal: ['normal möbliert', 0.3, 'm2Normal'],
     stark: ['stark gefüllt', 0.5, 'm2Stark'], messie: ['Messie-Wohnung', 0.8, 'm2Messie'] };  // Label, m³ je m², Flächenpreis
+  const FIRMA_FELDER = [['steuernummer', 'Steuernummer'], ['kontoinhaber', 'Kontoinhaber'], ['iban', 'IBAN'], ['bic', 'BIC'],
+    ['bank', 'Bank'], ['zahlungsziel', 'Zahlungsziel (Tage)']];
+  const EINHEITEN = ['pauschal', 'Stk.', 'Std.', 'm³', 'kg', 'km', 'm²'];
   let PREISE = null;
   let logoData = null;
 
@@ -45,7 +48,7 @@
 
   function seite(html) { $main.oninput = null; $main.onchange = null; $main.innerHTML = html; window.scrollTo(0, 0); }
   const zurueck = '<button class="back" data-go="home">← Übersicht</button>';
-  $main.addEventListener('click', e => { const g = e.target.closest('[data-go]'); if (g) { e.preventDefault(); ({ home, preise: preisSeite, besichtigung, uebergabe, archiv })[g.dataset.go](); } });
+  $main.addEventListener('click', e => { const g = e.target.closest('[data-go]'); if (g) { e.preventDefault(); ({ home, preise: preisSeite, besichtigung, uebergabe, rechnung, archiv })[g.dataset.go](); } });
 
   // ── Start / Login ──
   async function start() {
@@ -76,8 +79,9 @@
     seite(`<h1>Hallo Luca 👋</h1><div class="tiles">
       <button class="tile" data-go="besichtigung">📝 Besichtigung<small>Aufnahme vor Ort → Festpreis-Angebot als PDF</small></button>
       <button class="tile" data-go="uebergabe">✅ Übergabe<small>Übergabeprotokoll mit Unterschrift</small></button>
-      <button class="tile" data-go="preise">💶 Preisliste<small>Preise und Entsorgungskosten pflegen</small></button>
-      <button class="tile" data-go="archiv">📁 Archiv<small>Alle Angebote und Protokolle</small></button></div>`);
+      <button class="tile" data-go="rechnung">🧾 Rechnung<small>Rechnung aus Angebot oder neu, als PDF per E-Mail</small></button>
+      <button class="tile" data-go="preise">💶 Preisliste<small>Preise, Entsorgung, Bankdaten</small></button>
+      <button class="tile" data-go="archiv">📁 Archiv<small>Angebote, Rechnungen, Protokolle</small></button></div>`);
   }
 
   // ── Preisliste ──
@@ -91,10 +95,15 @@
         <p class="note">Netto-Preise wie auf der Liste des Entsorgers eintragen – die App rechnet 19 % MwSt drauf, weil du sie als Kleinunternehmer nicht zurückbekommst. Metall bringt dir Geld (Vergütung) und wird daher mit 0 € angesetzt.</p></div>
       <div class="card"><h2>Kalkulation (nur für dich, für Angebote)</h2><div class="grid">${KALK_FELDER.map(f => feld('kalkulation', f)).join('')}</div>
       <p class="note">Auf der Website stehen keine Preise – Kunden bekommen ihren Festpreis nach der Besichtigung.</p><p class="note">Zuletzt gespeichert: ${PREISE.aktualisiert ? new Date(PREISE.aktualisiert).toLocaleString('de-DE') : 'noch nie (Standardwerte)'}</p></div>
+      <div class="card"><h2>Firmen- und Bankdaten (für Rechnungen)</h2><div class="grid">${FIRMA_FELDER.map(([k, l]) => `<label>${l}<input data-f="${k}" value="${esc((PREISE.firma || {})[k] ?? '')}"></label>`).join('')}
+        <label class="breit">Umsatzsteuer auf Rechnungen<select data-f="ust"><option value="klein"${(PREISE.firma || {}).ust !== 'regel' ? ' selected' : ''}>Kleinunternehmer (§ 19 UStG) – keine Umsatzsteuer</option><option value="regel"${(PREISE.firma || {}).ust === 'regel' ? ' selected' : ''}>19 % Umsatzsteuer ausweisen (Regelbesteuerung)</option></select></label></div>
+        <p class="note">Die Steuernummer bekommst du vom Finanzamt nach der Anmeldung. Ohne Steuernummer ist eine Rechnung nicht vollständig.</p>
+        <p class="note"><b>Achtung:</b> Solange du Kleinunternehmer bist, darfst du keine Umsatzsteuer auf die Rechnung schreiben – sonst schuldest du sie trotzdem dem Finanzamt (§ 14c UStG). Erst umstellen, wenn du die Regelbesteuerung gewählt hast oder über der Umsatzgrenze liegst.</p></div>
       <div id="msg"></div><button class="btn" id="save">Speichern</button>`);
     document.getElementById('save').onclick = async () => {
-      const neu = { ab: {}, kalkulation: {}, entsorgung: {}, dichte: {}, firma: (PREISE.firma || {}) };
+      const neu = { ab: {}, kalkulation: {}, entsorgung: {}, dichte: {}, firma: {} };
       document.querySelectorAll('[data-g]').forEach(i => { neu[i.dataset.g][i.dataset.k] = num(i.value); });
+      document.querySelectorAll('[data-f]').forEach(i => { neu.firma[i.dataset.f] = i.value.trim(); });
       const msg = document.getElementById('msg');
       try { PREISE = (await api('preise_speichern', neu)).preise; msg.innerHTML = '<p class="ok">Gespeichert.</p>'; }
       catch (e) { msg.innerHTML = `<p class="err">${esc(e.message)}</p>`; }
@@ -357,6 +366,95 @@
     };
   }
 
+  // ── Rechnung ──
+  // Positionen sind netto; bei Kleinunternehmer ist netto = Endbetrag
+  const rechnungsSummen = (pos, mitUst) => {
+    const netto = Math.round(pos.reduce((t, p) => t + p.menge * p.preis, 0) * 100) / 100;
+    const ust = mitUst ? Math.round(netto * 19) / 100 : 0;
+    return { netto, ust, brutto: Math.round((netto + ust) * 100) / 100 };
+  };
+  async function rechnung() {
+    let angebote = [];
+    try { angebote = (await api('liste')).protokolle.filter(p => p.art === 'Angebot'); } catch (e) { /* ohne Vorlage */ }
+    const F = PREISE.firma || {}, ziel = Math.max(0, Math.floor(num(F.zahlungsziel || 14)));
+    seite(`${zurueck}<h1>Rechnung</h1>
+      ${!F.steuernummer || !F.iban ? '<div class="card"><p class="err">Steuernummer oder IBAN fehlt noch – bitte unter „Preisliste“ eintragen.</p></div>' : ''}
+      <div class="card"><label>Aus Angebot übernehmen<select id="vorlage"><option value="">– neu –</option>${angebote.map((a, i) => `<option value="${i}">${esc(a.nummer)} · ${esc(a.kunde)} · ${a.betrag != null ? eur(a.betrag) : ''}</option>`).join('')}</select></label>
+        <label style="margin-top:10px">Umsatzsteuer<select id="ust"><option value="klein"${F.ust !== 'regel' ? ' selected' : ''}>Kleinunternehmer (§ 19 UStG) – keine Umsatzsteuer</option><option value="regel"${F.ust === 'regel' ? ' selected' : ''}>zzgl. 19 % Umsatzsteuer</option></select></label>
+        <p class="note" id="ustinfo"></p></div>
+      <div class="card"><h2>Rechnungsempfänger</h2><div class="grid">
+        <label>Name / Firma *<input id="kname"></label><label>E-Mail<input id="kmail" type="email"></label>
+        <label class="breit">Anschrift *<textarea id="kadr" rows="2" placeholder="Straße Hausnummer, PLZ Ort"></textarea></label></div></div>
+      <div class="card"><h2>Angaben</h2><div class="grid">
+        <label>Rechnungsdatum<input id="rdat" value="${heute()}"></label>
+        <label>Leistungsdatum *<input id="ldat" placeholder="z. B. ${heute()}"></label>
+        <label class="breit">Ort der Leistung<input id="lort"></label>
+        <label>Bezug (Angebots-Nr.)<input id="bezug"></label>
+        <label>Zahlungsziel (Tage)<input id="ziel" type="text" inputmode="numeric" value="${ziel}"></label></div></div>
+      <div class="card"><h2>Positionen</h2><p class="note" id="posinfo"></p><div id="pos"></div><button class="btn sec small" id="padd">+ Position</button>
+        <table class="calc" id="summen" style="margin-top:14px"></table>
+        <label style="margin-top:12px">Davon Arbeits- und Fahrtkosten (§ 35a EStG, € inkl. USt)<input id="lohn" type="text" inputmode="decimal"></label>
+        <p class="note">Der Kunde kann 20 % der Arbeits- und Fahrtkosten von der Steuer abziehen, wenn er überweist (nicht bar). Entsorgung zählt nicht dazu.</p></div>
+      <div class="card"><label class="chk"><input type="checkbox" id="ankunde" checked> PDF per E-Mail an den Kunden senden (Kopie geht immer an dich)</label><div id="msg"></div></div>
+      <div class="sum"><div><div class="note" style="color:#9fb5ad">Rechnungsbetrag</div><div class="preis" id="sumpreis">–</div></div><button class="btn" id="senden">Rechnung erstellen</button></div>`);
+    const posBox = document.getElementById('pos');
+    const mitUst = () => document.getElementById('ust').value === 'regel';
+    const zeile = (b = '', m = 1, ep = '', einh = 'pauschal') => {
+      const d = document.createElement('div'); d.className = 'row'; d.style.gridTemplateColumns = '1fr 64px 92px 96px 40px';
+      d.innerHTML = `<label>Beschreibung<input class="pb" value="${esc(b)}"></label><label>Menge<input class="pm" type="text" inputmode="decimal" value="${String(m).replace('.', ',')}"></label>
+        <label>Einheit<select class="pu">${EINHEITEN.map(u => `<option${u === einh ? ' selected' : ''}>${u}</option>`).join('')}</select></label>
+        <label>Einzelpreis €<input class="pe" type="text" inputmode="decimal" value="${ep === '' ? '' : String(Math.round(ep * 100) / 100).replace('.', ',')}"></label><button class="x">×</button>`;
+      d.querySelector('.x').onclick = () => { d.remove(); summe(); }; posBox.append(d);
+    };
+    const positionen = () => [...posBox.querySelectorAll('.row')].map(r => ({ text: r.querySelector('.pb').value.trim(), menge: num(r.querySelector('.pm').value),
+      einheit: r.querySelector('.pu').value, preis: num(r.querySelector('.pe').value) })).filter(p => p.text || p.preis);
+    const summe = () => {
+      const s = rechnungsSummen(positionen(), mitUst());
+      document.getElementById('summen').innerHTML = mitUst()
+        ? `<tr><td>Zwischensumme netto</td><td>${eur(s.netto)}</td></tr><tr><td>zzgl. 19 % Umsatzsteuer</td><td>${eur(s.ust)}</td></tr><tr><td><b>Gesamtbetrag</b></td><td><b>${eur(s.brutto)}</b></td></tr>`
+        : `<tr><td><b>Gesamtbetrag</b> (keine USt nach § 19 UStG)</td><td><b>${eur(s.brutto)}</b></td></tr>`;
+      document.getElementById('posinfo').textContent = mitUst() ? 'Einzelpreise netto eingeben – die App rechnet 19 % Umsatzsteuer drauf.' : 'Einzelpreise sind Endpreise (keine Umsatzsteuer).';
+      document.getElementById('ustinfo').textContent = mitUst() ? 'Nur wählen, wenn du nicht mehr Kleinunternehmer bist – sonst schuldest du die ausgewiesene Steuer trotzdem.' : '';
+      document.getElementById('sumpreis').textContent = eur(s.brutto); return s;
+    };
+    zeile();
+    document.getElementById('padd').onclick = () => { zeile(); summe(); };
+    $main.oninput = () => summe(); $main.onchange = () => summe();
+    const setv = (id, v) => { document.getElementById(id).value = v || ''; };
+    document.getElementById('vorlage').onchange = e => {
+      const a = angebote[e.target.value]; if (!a) return; const d = a.daten || {};
+      setv('kname', a.kunde); setv('kmail', a.email); setv('kadr', (d.kunde && d.kunde.adr) || ''); setv('lort', a.objekt); setv('bezug', a.nummer);
+      // Angebotspreise sind Endpreise: mit USt auf netto zurückrechnen, damit der Kunde den Festpreis zahlt
+      const f = mitUst() ? 1 / 1.19 : 1;
+      posBox.innerHTML = '';
+      const posten = (d.posten || []).filter(([, v]) => v);
+      if (posten.length) {
+        posten.forEach(([b, v]) => zeile(b, 1, v * f));
+        const diff = (d.festpreis ?? a.betrag) - posten.reduce((t, [, v]) => t + v, 0);
+        if (Math.abs(diff) >= 0.01) zeile(diff < 0 ? 'Nachlass' : 'Rundung', 1, diff * f);
+      } else zeile(`Räumung, Abtransport und fachgerechte Entsorgung laut Angebot ${a.nummer}`, 1, (a.betrag || 0) * f);
+      setv('lohn', d.lohn ? String(Math.round(Math.min(d.lohn, d.festpreis ?? a.betrag) * 100) / 100).replace('.', ',') : '');
+      summe();
+    };
+    summe();
+    document.getElementById('senden').onclick = async () => {
+      const msg = document.getElementById('msg'); const v = id => document.getElementById(id).value.trim().replace(/\s*\n+\s*/g, ', ');
+      const pos = positionen();
+      if (!v('kname') || !v('kadr') || !v('ldat') || !pos.length) { msg.innerHTML = '<p class="err">Bitte Name, Anschrift, Leistungsdatum und mindestens eine Position ausfüllen.</p>'; return; }
+      const btn = document.getElementById('senden'); btn.disabled = true; btn.textContent = 'Wird erstellt …';
+      try {
+        const s = summe(); const tage = Math.max(0, Math.floor(num(v('ziel'))));
+        const { nummer } = await api('nummer', { art: 'rechnung' });
+        const d = { nummer, rdat: v('rdat'), ldat: v('ldat'), lort: v('lort'), bezug: v('bezug'), kunde: { name: v('kname'), mail: v('kmail'), adr: v('kadr') },
+          pos, ...s, mitUst: mitUst(), lohn: Math.min(num(v('lohn')), s.brutto), faellig: plusTage(tage), tage };
+        const pdf = await rechnungPdf(d);
+        const res = await api('speichern', { nummer, pdf, kunde: d.kunde.name, email: d.kunde.mail, telefon: '', objekt: d.lort || d.kunde.adr, betrag: s.brutto,
+          anKunde: document.getElementById('ankunde').checked, daten: { bezug: d.bezug, faellig: d.faellig, ldat: d.ldat, netto: s.netto, ust: s.ust } });
+        fertig(nummer, res.gesendet, pdf);
+      } catch (e) { msg.innerHTML = `<p class="err">${esc(e.message)}</p>`; btn.disabled = false; btn.textContent = 'Rechnung erstellen'; }
+    };
+  }
+
   // ── Archiv ──
   async function archiv() {
     seite(`${zurueck}<h1>Archiv</h1><div class="card list" id="liste"><p class="note">Lädt …</p></div>`);
@@ -406,6 +504,96 @@
       const stnr = ((PREISE && PREISE.firma) || {}).steuernummer;
       doc.text(`${stnr ? 'Steuernummer ' + stnr + ' · ' : ''}Gemäß § 19 UStG wird keine Umsatzsteuer berechnet. · Seite ${i} von ${n}`, 105, 290, { align: 'center' }); } };
     return P;
+  }
+
+  // Rechnung im Canva-Design: weiß, Logo oben links, grüne Tabellenkopfzeile, Fußzeile in drei Spalten
+  let logoGross = null;
+  async function logoVoll() {
+    if (logoGross) return logoGross;
+    try { logoGross = await new Promise((res, rej) => { const i = new Image(); i.onload = () => { const c = document.createElement('canvas'); c.width = i.width; c.height = i.height; c.getContext('2d').drawImage(i, 0, 0); res(c.toDataURL('image/png')); }; i.onerror = rej; i.src = '../assets/logo-full.png'; }); } catch (e) { logoGross = null; }
+    return logoGross;
+  }
+  async function rechnungPdf(d) {
+    const logoBild = await logoVoll();
+    const F = PREISE.firma || {};
+    const doc = new window.jspdf.jsPDF({ unit: 'mm', format: 'a4', compress: true });
+    const GRUEN = [11, 58, 40], TEXT = [51, 51, 51], GRAU = [120, 130, 126], L = 14, R = 196;
+    const farbe = c => doc.setTextColor(...c);
+    const spalten = { pos: L + 4, text: L + 16, menge: 124, einheit: 140, preis: 166, gesamt: R - 4 };
+    let y;
+    const fuss = () => {
+      doc.setDrawColor(200, 210, 205); doc.setLineWidth(0.3); doc.line(L, 262, R, 262);
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(9); farbe(GRUEN);
+      doc.text('Bank / IBAN / BIC', L, 268); doc.text('Steuernummer', 80, 268); doc.text('Kontakt', 146, 268);
+      doc.setFont('helvetica', 'normal'); doc.setFontSize(8.5); farbe(TEXT);
+      doc.text([F.kontoinhaber || FIRMA.inhaber, F.bank || '', F.iban ? 'IBAN ' + F.iban : 'IBAN ________________', F.bic ? 'BIC ' + F.bic : ''].filter(Boolean), L, 273);
+      doc.text([F.steuernummer || '________________', `${FIRMA.name} · Inh. ${FIRMA.inhaber}`], 80, 273);
+      doc.text([FIRMA.tel, FIRMA.mail, FIRMA.web], 146, 273);
+    };
+    const kopf = erste => {
+      if (logoBild) doc.addImage(logoBild, 'PNG', L, 10, erste ? 52 : 34, erste ? 36.5 : 24, 'logoVoll', 'FAST');
+      doc.setFontSize(9); farbe([0, 0, 0]); doc.setFont('helvetica', 'bold'); doc.text(FIRMA.name, 150, 15);
+      doc.setFont('helvetica', 'normal');
+      doc.text([`Inhaber ${FIRMA.inhaber}`, FIRMA.strasse, FIRMA.ort, `Tel. ${FIRMA.tel}`, FIRMA.mail, FIRMA.web], 150, 20.5, { lineHeightFactor: 1.45 });
+      fuss();
+    };
+    const tabellenKopf = () => {
+      doc.setFillColor(...GRUEN); doc.rect(L, y, R - L, 10, 'F');
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(9); doc.setTextColor(255, 255, 255);
+      doc.text('Pos.', spalten.pos, y + 6.4); doc.text('Beschreibung', spalten.text, y + 6.4);
+      doc.text('Menge', spalten.menge, y + 6.4, { align: 'right' }); doc.text('Einheit', spalten.einheit, y + 6.4, { align: 'center' });
+      doc.text('Einzelpreis', spalten.preis, y + 6.4, { align: 'right' }); doc.text('Gesamt', spalten.gesamt, y + 6.4, { align: 'right' });
+      y += 10; doc.setFont('helvetica', 'normal'); farbe(TEXT);
+    };
+    const neueSeite = () => { doc.addPage(); kopf(false); y = 44; tabellenKopf(); };
+
+    kopf(true);
+    // Empfänger und Rechnungsdaten
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(7); farbe(GRAU); doc.text(`${FIRMA.name} · ${FIRMA.strasse} · ${FIRMA.ort}`, L, 55);
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(10.5); farbe(GRUEN); doc.text('Rechnung an', L, 61);
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(10.5); farbe([0, 0, 0]);
+    doc.text([d.kunde.name, ...doc.splitTextToSize(d.kunde.adr.replace(/,\s*/g, '\n'), 80)], L, 67.5, { lineHeightFactor: 1.4 });
+    const info = [['Rechnungsnummer:', d.nummer], ['Rechnungsdatum:', d.rdat], ['Leistungsdatum:', d.ldat], ['Leistungsort:', d.lort], ['Angebotsnummer:', d.bezug]].filter(([, w]) => w);
+    doc.setFontSize(10);
+    let iy = 61;
+    info.forEach(([k, w]) => { const z = doc.splitTextToSize(String(w), 46).slice(0, 3); doc.setFont('helvetica', 'bold'); doc.text(k, 112, iy); doc.setFont('helvetica', 'normal'); doc.text(z, 150, iy, { lineHeightFactor: 1.3 }); iy += 6.3 + (z.length - 1) * 4.6; });
+    const hy = Math.max(105, iy + 10);
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(26); farbe(GRUEN); doc.text('Rechnung', L, hy);
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(9.5); farbe(TEXT); doc.text('Für unsere Leistungen berechnen wir Ihnen wie folgt:', L, hy + 7);
+    y = hy + 12; tabellenKopf();
+    // Positionen, abwechselnd hinterlegt
+    doc.setFontSize(9.5);
+    d.pos.forEach((p, i) => {
+      const z = doc.splitTextToSize(p.text || '–', 92); const h = Math.max(10, z.length * 4.4 + 5.6);
+      if (y + h > 226) neueSeite();
+      if (i % 2) { doc.setFillColor(245, 247, 246); doc.rect(L, y, R - L, h, 'F'); }
+      doc.setDrawColor(228, 233, 231); doc.setLineWidth(0.2); doc.line(L, y + h, R, y + h);
+      const ty = y + 6.3; farbe(TEXT);
+      doc.text(`${i + 1}.`, spalten.pos, ty); doc.text(z, spalten.text, ty, { lineHeightFactor: 1.3 });
+      doc.text(p.menge.toLocaleString('de-DE'), spalten.menge, ty, { align: 'right' }); doc.text(p.einheit, spalten.einheit, ty, { align: 'center' });
+      doc.text(eur(p.preis), spalten.preis, ty, { align: 'right' }); doc.text(eur(p.menge * p.preis), spalten.gesamt, ty, { align: 'right' });
+      y += h;
+    });
+    // Summen
+    if (y + 34 > 226) neueSeite();
+    y += 9; doc.setFontSize(10);
+    if (d.mitUst) {
+      [['Zwischensumme netto', d.netto], ['zzgl. 19 % Umsatzsteuer', d.ust]].forEach(([k, w]) => { farbe(TEXT); doc.text(k, 120, y); doc.text(eur(w), spalten.gesamt, y, { align: 'right' }); y += 6; });
+      doc.setDrawColor(...GRUEN); doc.setLineWidth(0.4); doc.line(120, y - 2.5, R, y - 2.5); y += 4;
+    }
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(14); farbe(GRUEN);
+    doc.text('Gesamtbetrag', 120, y); doc.text(eur(d.brutto), spalten.gesamt, y, { align: 'right' }); y += 12;
+    // Hinweise
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(9.5); farbe(TEXT);
+    const hinweis = t => { const z = doc.splitTextToSize(t, R - L); if (y + z.length * 4.6 > 256) { doc.addPage(); kopf(false); y = 44; } doc.text(z, L, y, { lineHeightFactor: 1.35 }); y += z.length * 4.6 + 2.2; };
+    if (!d.mitUst) hinweis('Gemäß § 19 UStG wird keine Umsatzsteuer berechnet (Kleinunternehmerregelung).');
+    if (d.lohn > 0) hinweis(`Enthaltene Arbeits- und Fahrtkosten nach § 35a EStG (haushaltsnahe Dienstleistung${d.mitUst ? ', inkl. Umsatzsteuer' : ''}): ${eur(d.lohn)}. Die Steuerermäßigung setzt eine Zahlung per Überweisung voraus.`);
+    hinweis(d.tage ? `Zahlbar innerhalb von ${d.tage} Tagen ohne Abzug bis zum ${d.faellig}. Bitte geben Sie die Rechnungsnummer ${d.nummer} als Verwendungszweck an.` : `Zahlbar sofort ohne Abzug. Bitte geben Sie die Rechnungsnummer ${d.nummer} als Verwendungszweck an.`);
+    y += 1; doc.setFont('helvetica', 'bold'); hinweis('Vielen Dank für Ihren Auftrag!');
+    // Seitenzahlen bei mehreren Seiten
+    const n = doc.getNumberOfPages();
+    if (n > 1) for (let i = 1; i <= n; i++) { doc.setPage(i); doc.setFont('helvetica', 'normal'); doc.setFontSize(8); farbe(GRAU); doc.text(`Seite ${i} von ${n}`, R, 290, { align: 'right' }); }
+    return doc.output('datauristring');
   }
 
   async function angebotPdf(d, fotos) {
