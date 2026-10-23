@@ -96,9 +96,9 @@
       <div class="card"><h2>Kalkulation (nur für dich, für Angebote)</h2><div class="grid">${KALK_FELDER.map(f => feld('kalkulation', f)).join('')}</div>
       <p class="note">Auf der Website stehen keine Preise – Kunden bekommen ihren Festpreis nach der Besichtigung.</p><p class="note">Zuletzt gespeichert: ${PREISE.aktualisiert ? new Date(PREISE.aktualisiert).toLocaleString('de-DE') : 'noch nie (Standardwerte)'}</p></div>
       <div class="card"><h2>Firmen- und Bankdaten (für Rechnungen)</h2><div class="grid">${FIRMA_FELDER.map(([k, l]) => `<label>${l}<input data-f="${k}" value="${esc((PREISE.firma || {})[k] ?? '')}"></label>`).join('')}
-        <label class="breit">Umsatzsteuer auf Rechnungen<select data-f="ust"><option value="klein"${(PREISE.firma || {}).ust !== 'regel' ? ' selected' : ''}>Kleinunternehmer (§ 19 UStG) – keine Umsatzsteuer</option><option value="regel"${(PREISE.firma || {}).ust === 'regel' ? ' selected' : ''}>19 % Umsatzsteuer ausweisen (Regelbesteuerung)</option></select></label></div>
+        <label class="breit">Umsatzsteuer auf Rechnungen<select data-f="ustModus"><option value="regel"${(PREISE.firma || {}).ustModus !== 'klein' ? ' selected' : ''}>zzgl. 19 % Umsatzsteuer (Standard)</option><option value="klein"${(PREISE.firma || {}).ustModus === 'klein' ? ' selected' : ''}>Kleinunternehmer (§ 19 UStG) – keine Umsatzsteuer</option></select></label></div>
         <p class="note">Die Steuernummer bekommst du vom Finanzamt nach der Anmeldung. Ohne Steuernummer ist eine Rechnung nicht vollständig.</p>
-        <p class="note"><b>Achtung:</b> Solange du Kleinunternehmer bist, darfst du keine Umsatzsteuer auf die Rechnung schreiben – sonst schuldest du sie trotzdem dem Finanzamt (§ 14c UStG). Erst umstellen, wenn du die Regelbesteuerung gewählt hast oder über der Umsatzgrenze liegst.</p></div>
+        <p class="note">Mit 19 % Umsatzsteuer kreuzt du im Fragebogen zur steuerlichen Erfassung „Verzicht auf die Kleinunternehmerregelung“ an. Dann bekommst du auch die Umsatzsteuer auf Entsorgung, Transporter und Material vom Finanzamt zurück (Vorsteuer).</p></div>
       <div id="msg"></div><button class="btn" id="save">Speichern</button>`);
     document.getElementById('save').onclick = async () => {
       const neu = { ab: {}, kalkulation: {}, entsorgung: {}, dichte: {}, firma: {} };
@@ -380,8 +380,7 @@
     seite(`${zurueck}<h1>Rechnung</h1>
       ${!F.steuernummer || !F.iban ? '<div class="card"><p class="err">Steuernummer oder IBAN fehlt noch – bitte unter „Preisliste“ eintragen.</p></div>' : ''}
       <div class="card"><label>Aus Angebot übernehmen<select id="vorlage"><option value="">– neu –</option>${angebote.map((a, i) => `<option value="${i}">${esc(a.nummer)} · ${esc(a.kunde)} · ${a.betrag != null ? eur(a.betrag) : ''}</option>`).join('')}</select></label>
-        <label style="margin-top:10px">Umsatzsteuer<select id="ust"><option value="klein"${F.ust !== 'regel' ? ' selected' : ''}>Kleinunternehmer (§ 19 UStG) – keine Umsatzsteuer</option><option value="regel"${F.ust === 'regel' ? ' selected' : ''}>zzgl. 19 % Umsatzsteuer</option></select></label>
-        <p class="note" id="ustinfo"></p></div>
+        <label style="margin-top:10px">Umsatzsteuer<select id="ust"><option value="regel"${F.ustModus !== 'klein' ? ' selected' : ''}>zzgl. 19 % Umsatzsteuer</option><option value="klein"${F.ustModus === 'klein' ? ' selected' : ''}>Kleinunternehmer (§ 19 UStG) – keine Umsatzsteuer</option></select></label></div>
       <div class="card"><h2>Rechnungsempfänger</h2><div class="grid">
         <label>Name / Firma *<input id="kname"></label><label>E-Mail<input id="kmail" type="email"></label>
         <label class="breit">Anschrift *<textarea id="kadr" rows="2" placeholder="Straße Hausnummer, PLZ Ort"></textarea></label></div></div>
@@ -414,7 +413,6 @@
         ? `<tr><td>Zwischensumme netto</td><td>${eur(s.netto)}</td></tr><tr><td>zzgl. 19 % Umsatzsteuer</td><td>${eur(s.ust)}</td></tr><tr><td><b>Gesamtbetrag</b></td><td><b>${eur(s.brutto)}</b></td></tr>`
         : `<tr><td><b>Gesamtbetrag</b> (keine USt nach § 19 UStG)</td><td><b>${eur(s.brutto)}</b></td></tr>`;
       document.getElementById('posinfo').textContent = mitUst() ? 'Einzelpreise netto eingeben – die App rechnet 19 % Umsatzsteuer drauf.' : 'Einzelpreise sind Endpreise (keine Umsatzsteuer).';
-      document.getElementById('ustinfo').textContent = mitUst() ? 'Nur wählen, wenn du nicht mehr Kleinunternehmer bist – sonst schuldest du die ausgewiesene Steuer trotzdem.' : '';
       document.getElementById('sumpreis').textContent = eur(s.brutto); return s;
     };
     zeile();
