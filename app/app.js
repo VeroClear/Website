@@ -33,6 +33,8 @@
   const eur = n => (Math.round(n * 100) / 100).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €';
   const num = v => { const n = parseFloat(String(v ?? '').replace(',', '.')); return isFinite(n) ? n : 0; };
   const heute = () => new Date().toLocaleDateString('de-DE');
+  // Regelbesteuerung: Preise netto + 19 % USt, Vorsteuer auf Entsorgung wird erstattet
+  const mitUstStandard = () => ((PREISE && PREISE.firma) || {}).ustModus !== 'klein';
   const plusTage = t => { const d = new Date(); d.setDate(d.getDate() + t); return d.toLocaleDateString('de-DE'); };
 
   async function api(a, body) {
@@ -92,7 +94,7 @@
       <div class="card"><h2>Entsorgungskosten (Preise deines Entsorgers, netto)</h2>
         <div class="rows">${FRAKTIONEN.map(([k, l]) => `<div class="row" style="grid-template-columns:1fr 1fr"><label>${l}: € pro Tonne<input type="text" inputmode="decimal" step="0.01" min="0" data-g="entsorgung" data-k="${k}" value="${PREISE.entsorgung[k]}"></label><label>Gewicht: Tonnen pro m³<input type="text" inputmode="decimal" step="0.01" min="0" data-g="dichte" data-k="${k}" value="${PREISE.dichte[k]}"></label></div>`).join('')}</div>
         <div class="grid"><label>Übernahmeschein je Anlieferung (€)<input type="text" inputmode="decimal" step="0.01" min="0" data-g="entsorgung" data-k="uebernahmeschein" value="${PREISE.entsorgung.uebernahmeschein}"></label></div>
-        <p class="note">Netto-Preise wie auf der Liste des Entsorgers eintragen – die App rechnet 19 % MwSt drauf, weil du sie als Kleinunternehmer nicht zurückbekommst. Metall bringt dir Geld (Vergütung) und wird daher mit 0 € angesetzt.</p></div>
+        <p class="note">Netto-Preise wie auf der Liste des Entsorgers eintragen. ${mitUstStandard() ? 'Die App rechnet netto, weil du die Umsatzsteuer des Entsorgers als Vorsteuer zurückbekommst.' : 'Die App rechnet 19 % MwSt drauf, weil du sie als Kleinunternehmer nicht zurückbekommst.'} Metall bringt dir Geld (Vergütung) und wird daher mit 0 € angesetzt.</p></div>
       <div class="card"><h2>Kalkulation (nur für dich, für Angebote)</h2><div class="grid">${KALK_FELDER.map(f => feld('kalkulation', f)).join('')}</div>
       <p class="note">Auf der Website stehen keine Preise – Kunden bekommen ihren Festpreis nach der Besichtigung.</p><p class="note">Zuletzt gespeichert: ${PREISE.aktualisiert ? new Date(PREISE.aktualisiert).toLocaleString('de-DE') : 'noch nie (Standardwerte)'}</p></div>
       <div class="card"><h2>Firmen- und Bankdaten (für Rechnungen)</h2><div class="grid">${FIRMA_FELDER.map(([k, l]) => `<label>${l}<input data-f="${k}" value="${esc((PREISE.firma || {})[k] ?? '')}"></label>`).join('')}
@@ -143,9 +145,9 @@
     return { leer: () => leer, bild: () => { if (leer) return null; const w = document.createElement('canvas'); w.width = c.width / 2; w.height = c.height / 2; const g = w.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, w.width, w.height); g.drawImage(c, 0, 0, w.width, w.height); return w.toDataURL('image/jpeg', 0.85); }, loeschen: () => { ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clearRect(0, 0, c.width, c.height); groesse(); } };
   }
 
-  // Entsorgungskosten brutto: m³ × t/m³ × €/t netto × 1,19 (+ Übernahmescheine)
+  // Entsorgungskosten: m³ × t/m³ × €/t netto (+ Übernahmescheine); als Kleinunternehmer × 1,19, weil keine Vorsteuer
   function entsorgungskosten(mengen) {
-    const E = PREISE.entsorgung, D = PREISE.dichte, MWST = 1.19;
+    const E = PREISE.entsorgung, D = PREISE.dichte, MWST = mitUstStandard() ? 1 : 1.19;
     let summe = 0; const details = [];
     mengen.forEach(([k, m3]) => {
       if (m3 <= 0) return;
@@ -195,14 +197,14 @@
       <div class="card"><h2>Fotos</h2><div id="fotos"></div></div>
       <div class="card"><h2>Notizen für das Angebot</h2><textarea id="notiz" placeholder="z. B. Zugang über Hof, Termin nach Absprache"></textarea></div>
       <div class="card"><h2>Kalkulation</h2><table class="calc" id="calc"></table>
-        <label style="margin-top:12px">Festpreis (anpassbar)<input id="fp" type="text" inputmode="decimal"></label>
+        <label style="margin-top:12px">Festpreis ${mitUstStandard() ? 'netto ' : ''}(anpassbar)<input id="fp" type="text" inputmode="decimal"></label><p class="note" id="fpust"></p>
         <label>Angebot gültig bis<input id="gueltig" value="${plusTage(14)}"></label></div>
       <div class="card"><h2>Auftrag vor Ort erteilt? (optional)</h2>
         <label class="chk"><input type="checkbox" id="auftrag"> Kunde erteilt den Auftrag zum Festpreis</label>
         <div id="sigbox" hidden><canvas class="sig" id="sig"></canvas><button class="btn sec small" id="sigclr" style="margin-top:8px">Unterschrift löschen</button></div></div>
       <div class="card"><label class="chk"><input type="checkbox" id="ankunde" checked> PDF per E-Mail an den Kunden senden (Kopie geht immer an dich)</label>
         <div id="msg"></div></div>
-      <div class="sum"><div><div class="note" style="color:#9fb5ad">Festpreis</div><div class="preis" id="sumpreis">–</div></div><button class="btn" id="senden">PDF erstellen</button></div>`);
+      <div class="sum"><div><div class="note" style="color:#9fb5ad">Festpreis${mitUstStandard() ? ' inkl. USt' : ''}</div><div class="preis" id="sumpreis">–</div></div><button class="btn" id="senden">PDF erstellen</button></div>`);
     fotoFeld('fotos', fotos);
     const sig = unterschrift('sig');
     document.getElementById('auftrag').onchange = e => { document.getElementById('sigbox').hidden = !e.target.checked; if (e.target.checked) sig.loeschen(); };
@@ -267,12 +269,16 @@
       const wert = [...wertBox.querySelectorAll('.row')].map(r => [r.querySelector('.wb').value.trim(), num(r.querySelector('.wv').value)]).filter(([b, v]) => b || v);
       wert.forEach(([b, v]) => p.push([`Wertanrechnung: ${b || 'Gegenstand'}`, -v]));
       const summe = Math.max(0, p.reduce((s, x) => s + x[1], 0));
-      return { m3, mengen, posten: p, summe, wert, lohn: Math.min(lohn, summe) };
+      return { m3, mengen, posten: p, summe, wert, lohn: Math.min(lohn, summe) };  // alles netto bei Regelbesteuerung
     }
-    function zeigeSumme() { const fp = num(document.getElementById('fp').value); document.getElementById('sumpreis').textContent = eur(fp); }
+    function zeigeSumme() {
+      const fp = num(document.getElementById('fp').value), u = ustBetrag(fp);
+      document.getElementById('sumpreis').textContent = eur(fp + u);
+      document.getElementById('fpust').textContent = mitUstStandard() ? `zzgl. 19 % USt ${eur(u)} = Festpreis brutto ${eur(fp + u)}` : '';
+    }
     function rechnen() {
       const r = posten();
-      document.getElementById('calc').innerHTML = r.posten.map(([b, v]) => `<tr><td>${esc(b)}</td><td>${eur(v)}</td></tr>`).join('') + `<tr><td><b>Berechnet</b></td><td><b>${eur(r.summe)}</b></td></tr>`;
+      document.getElementById('calc').innerHTML = r.posten.map(([b, v]) => `<tr><td>${esc(b)}</td><td>${eur(v)}</td></tr>`).join('') + `<tr><td><b>Berechnet${mitUstStandard() ? ' (netto)' : ''}</b></td><td><b>${eur(r.summe)}</b></td></tr>`;
       if (!fpManuell) document.getElementById('fp').value = Math.ceil(r.summe / 10) * 10;
       zeigeSumme();
     }
@@ -293,16 +299,16 @@
       if (document.getElementById('auftrag').checked && sig.leer()) { msg.innerHTML = '<p class="err">Bitte Unterschrift des Kunden einholen oder Häkchen bei „Auftrag erteilt“ entfernen.</p>'; return; }
       const btn = document.getElementById('senden'); btn.disabled = true; btn.textContent = 'Wird erstellt …';
       try {
-        const r = posten(); const fp = num(v('fp'));
+        const r = posten(); const fp = num(v('fp')); const mitUst = mitUstStandard(), ust = ustBetrag(fp), brutto = Math.round((fp + ust) * 100) / 100;
         const { nummer } = await api('nummer', { art: 'angebot' });
-        const d = { lohn: r.lohn, nummer, datum: heute(), kunde: { name: v('kname'), tel: v('ktel'), mail: v('kmail'), adr: v('kadr') },
+        const d = { lohn: r.lohn, nummer, mitUst, ust, brutto, datum: heute(), kunde: { name: v('kname'), tel: v('ktel'), mail: v('kmail'), adr: v('kadr') },
           objekt: { adr: v('oadr'), art: v('oart'), flaeche: v('ofl'), etage: v('oet'), aufzug: document.getElementById('oauf').checked },
           m3: Object.fromEntries(r.mengen.map(([k, v]) => [k, Math.round(v * 100) / 100])),
           posten: r.posten, berechnet: r.summe, festpreis: fp, gueltig: v('gueltig'), notiz: v('notiz'),
           auftrag: document.getElementById('auftrag').checked, unterschrift: sig.bild() };
         const pdf = await angebotPdf(d, fotos);
         const res = await api('speichern', { nummer, pdf, kunde: d.kunde.name, email: d.kunde.mail, telefon: d.kunde.tel, objekt: d.objekt.adr,
-          betrag: fp, anKunde: document.getElementById('ankunde').checked, daten: { kunde: d.kunde, objekt: d.objekt, festpreis: fp, auftrag: d.auftrag, posten: r.posten, berechnet: r.summe, lohn: r.lohn } });
+          betrag: brutto, anKunde: document.getElementById('ankunde').checked, daten: { kunde: d.kunde, objekt: d.objekt, festpreis: fp, netto: mitUst, auftrag: d.auftrag, posten: r.posten, berechnet: r.summe, lohn: r.lohn } });
         fertig(nummer, res.gesendet, pdf);
       } catch (e) { msg.innerHTML = `<p class="err">${esc(e.message)}</p>`; btn.disabled = false; btn.textContent = 'PDF erstellen'; }
     };
@@ -366,6 +372,8 @@
     };
   }
 
+  const ustBetrag = netto => mitUstStandard() ? Math.round(netto * 19) / 100 : 0;
+
   // ── Rechnung ──
   // Positionen sind netto; bei Kleinunternehmer ist netto = Endbetrag
   const rechnungsSummen = (pos, mitUst) => {
@@ -422,8 +430,8 @@
     document.getElementById('vorlage').onchange = e => {
       const a = angebote[e.target.value]; if (!a) return; const d = a.daten || {};
       setv('kname', a.kunde); setv('kmail', a.email); setv('kadr', (d.kunde && d.kunde.adr) || ''); setv('lort', a.objekt); setv('bezug', a.nummer);
-      // Angebotspreise sind Endpreise: mit USt auf netto zurückrechnen, damit der Kunde den Festpreis zahlt
-      const f = mitUst() ? 1 / 1.19 : 1;
+      // Neue Angebote sind netto; alte (§ 19) sind Endpreise und werden mit USt auf netto zurückgerechnet
+      const f = d.netto ? (mitUst() ? 1 : 1.19) : (mitUst() ? 1 / 1.19 : 1);
       posBox.innerHTML = '';
       const posten = (d.posten || []).filter(([, v]) => v);
       if (posten.length) {
@@ -431,7 +439,8 @@
         const diff = (d.festpreis ?? a.betrag) - posten.reduce((t, [, v]) => t + v, 0);
         if (Math.abs(diff) >= 0.01) zeile(diff < 0 ? 'Nachlass' : 'Rundung', 1, diff * f);
       } else zeile(`Räumung, Abtransport und fachgerechte Entsorgung laut Angebot ${a.nummer}`, 1, (a.betrag || 0) * f);
-      setv('lohn', d.lohn ? String(Math.round(Math.min(d.lohn, d.festpreis ?? a.betrag) * 100) / 100).replace('.', ',') : '');
+      const lohnBrutto = d.lohn ? Math.min(d.lohn, d.festpreis ?? a.betrag) * (d.netto ? 1.19 : 1) : 0;  // § 35a zählt inkl. USt
+      setv('lohn', lohnBrutto ? String(Math.round(lohnBrutto * 100) / 100).replace('.', ',') : '');
       summe();
     };
     summe();
@@ -500,7 +509,7 @@
     P.fuss = () => { const n = doc.getNumberOfPages(); for (let i = 1; i <= n; i++) { doc.setPage(i); doc.setFontSize(8); doc.setTextColor(91, 107, 102);
       doc.text(`VeroClear · Inhaber: ${FIRMA.inhaber} · ${FIRMA.strasse} · ${FIRMA.ort} · ${FIRMA.tel}`, 105, 286, { align: 'center' });
       const stnr = ((PREISE && PREISE.firma) || {}).steuernummer;
-      doc.text(`${stnr ? 'Steuernummer ' + stnr + ' · ' : ''}Gemäß § 19 UStG wird keine Umsatzsteuer berechnet. · Seite ${i} von ${n}`, 105, 290, { align: 'center' }); } };
+      doc.text(`${stnr ? 'Steuernummer ' + stnr + ' · ' : ''}${mitUstStandard() ? '' : 'Gemäß § 19 UStG wird keine Umsatzsteuer berechnet. · '}Seite ${i} von ${n}`, 105, 290, { align: 'center' }); } };
     return P;
   }
 
@@ -605,11 +614,16 @@
     P.y += 3;
     d.posten.forEach(([b, v]) => { const z = doc.splitTextToSize(b, 130); P.platz(z.length * 5 + 2); doc.text(z, P.x, P.y); doc.text(eur(v), 192, P.y, { align: 'right' }); P.y += z.length * 5 + 1.5; });
     if (Math.abs(d.festpreis - d.berechnet) >= 0.01) { P.platz(7); doc.text(d.festpreis < d.berechnet ? 'Nachlass' : 'Rundung', P.x, P.y); doc.text(eur(d.festpreis - d.berechnet), 192, P.y, { align: 'right' }); P.y += 6.5; }
-    P.platz(14); doc.setDrawColor(10, 29, 25); doc.line(P.x, P.y, 192, P.y); P.y += 7; doc.setFont('helvetica', 'bold'); doc.setFontSize(13);
-    doc.text('Festpreis', P.x, P.y); doc.text(eur(d.festpreis), 192, P.y, { align: 'right' }); P.y += 5; doc.setFont('helvetica', 'normal'); doc.setFontSize(9);
-    doc.text('Endpreis. Gemäß § 19 UStG wird keine Umsatzsteuer berechnet.', P.x, P.y); P.y += 8; doc.setFontSize(10);
+    P.platz(d.mitUst ? 28 : 14); doc.setDrawColor(10, 29, 25); doc.line(P.x, P.y, 192, P.y); P.y += 7;
+    if (d.mitUst) {
+      [['Summe netto', d.festpreis], ['zzgl. 19 % Umsatzsteuer', d.ust]].forEach(([k, w]) => { doc.text(k, P.x, P.y); doc.text(eur(w), 192, P.y, { align: 'right' }); P.y += 6; });
+      P.y += 1;
+    }
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(13);
+    doc.text(d.mitUst ? 'Festpreis inkl. USt' : 'Festpreis', P.x, P.y); doc.text(eur(d.mitUst ? d.brutto : d.festpreis), 192, P.y, { align: 'right' }); P.y += 5; doc.setFont('helvetica', 'normal'); doc.setFontSize(9);
+    doc.text(d.mitUst ? 'Alle Einzelpreise netto zzgl. 19 % Umsatzsteuer.' : 'Endpreis. Gemäß § 19 UStG wird keine Umsatzsteuer berechnet.', P.x, P.y); P.y += 8; doc.setFontSize(10);
     P.text(`Das Angebot ist gültig bis ${d.gueltig}. Der Festpreis gilt für den besichtigten Umfang; zusätzliche Gegenstände oder Räume werden vorher mit Ihnen abgestimmt. Asbesthaltige Materialien sind ausgenommen und müssen von einer Fachfirma entsorgt werden.`);
-    if (d.lohn > 0) { P.y += 2; P.text(`Steuertipp: Im Festpreis sind Arbeits- und Fahrtkosten von ca. ${eur(Math.min(d.lohn, d.festpreis))} enthalten. Davon können Sie 20 % als haushaltsnahe Dienstleistung nach § 35a EStG von Ihrer Steuer abziehen (höchstens 4.000 € im Jahr). Entsorgungskosten zählen nicht dazu.`); }
+    if (d.lohn > 0) { P.y += 2; P.text(`Steuertipp: Im Festpreis sind Arbeits- und Fahrtkosten${d.mitUst ? ' (inkl. Umsatzsteuer)' : ''} von ca. ${eur(Math.min(d.lohn, d.festpreis) * (d.mitUst ? 1.19 : 1))} enthalten. Davon können Sie 20 % als haushaltsnahe Dienstleistung nach § 35a EStG von Ihrer Steuer abziehen (höchstens 4.000 € im Jahr). Entsorgungskosten zählen nicht dazu.`); }
     if (d.notiz) { P.y += 3; P.abschnitt('Hinweise'); P.text(d.notiz); }
     await P.fotos(fotos);
     P.y += 4; P.abschnitt(d.auftrag ? 'Auftragserteilung' : 'Auftrag erteilen');
