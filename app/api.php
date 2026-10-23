@@ -221,24 +221,66 @@ function mailMitPdf(string $an, array $eintrag, string $pdf): void
     $art = $eintrag['art'];
     $betreff = ['Angebot' => "Ihr Festpreis-Angebot {$eintrag['nummer']} – VeroClear", 'Rechnung' => "Rechnung {$eintrag['nummer']} – VeroClear"][$art]
         ?? "Übergabeprotokoll {$eintrag['nummer']} – VeroClear";
-    $text = "Guten Tag" . ($eintrag['kunde'] ? " {$eintrag['kunde']}" : '') . ",\n\n"
-        . (['Angebot' => "vielen Dank für die Besichtigung. Im Anhang finden Sie unser Festpreis-Angebot {$eintrag['nummer']}.\n\n",
-            'Rechnung' => "vielen Dank für Ihren Auftrag. Im Anhang finden Sie unsere Rechnung {$eintrag['nummer']}. Die Zahlungsdaten stehen auf der Rechnung.\n\n"][$art]
-            ?? "im Anhang finden Sie das Übergabeprotokoll {$eintrag['nummer']} zu Ihrem Auftrag.\n\n")
-        . "Bei Fragen erreichen Sie uns unter +49 179 11 33 427 oder per Antwort auf diese E-Mail.\n\nViele Grüße\nVeroClear\nInhaber: Luca De Caro\nFriedrichstraße 10 · 78652 Deißlingen\nhttps://veroclear.de\n";
-    $grenze = 'vc' . bin2hex(random_bytes(8));
+    $anrede = "Guten Tag" . ($eintrag['kunde'] ? " {$eintrag['kunde']}" : '') . ",";
+    $absaetze = [
+        ['Angebot' => "vielen Dank für die Besichtigung. Im Anhang finden Sie unser Festpreis-Angebot {$eintrag['nummer']}.",
+         'Rechnung' => "vielen Dank für Ihren Auftrag. Im Anhang finden Sie unsere Rechnung {$eintrag['nummer']}. Die Zahlungsdaten stehen auf der Rechnung."][$art]
+            ?? "im Anhang finden Sie das Übergabeprotokoll {$eintrag['nummer']} zu Ihrem Auftrag.",
+        'Bei Fragen erreichen Sie uns unter +49 179 11 33 427 oder per Antwort auf diese E-Mail.',
+        'Viele Grüße',
+    ];
+    $text = $anrede . "\n\n" . implode("\n\n", $absaetze)
+        . "\n\n--\nVeroClear\nInhaber: Luca De Caro\nEntrümpelung & Haushaltsauflösung zum Festpreis\nTel. +49 179 11 33 427 · kontakt@veroclear.de\nveroclear.de · Friedrichstraße 10 · 78652 Deißlingen\n";
+    $html = '<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.5;color:#0A1D19">'
+        . '<p style="margin:0 0 14px">' . htmlspecialchars($anrede) . '</p>'
+        . implode('', array_map(fn($a) => '<p style="margin:0 0 14px">' . htmlspecialchars($a) . '</p>', $absaetze))
+        . signaturHtml() . '</div>';
+
+    $logo = __DIR__ . '/../assets/logo-symbol.png';
+    $mitLogo = is_file($logo);
+    $g1 = 'vc' . bin2hex(random_bytes(8));
+    $g2 = 'vr' . bin2hex(random_bytes(8));
+    $g3 = 'va' . bin2hex(random_bytes(8));
     $kopf = [
         'MIME-Version: 1.0',
         'From: =?UTF-8?B?' . base64_encode('VeroClear') . '?= <' . $cfg['user'] . '>',
-        "Content-Type: multipart/mixed; boundary=\"$grenze\"",
+        "Content-Type: multipart/mixed; boundary=\"$g1\"",
     ];
-    $body = "--$grenze\r\nContent-Type: text/plain; charset=UTF-8\r\nContent-Transfer-Encoding: base64\r\n\r\n"
+    $alternativ = "Content-Type: multipart/alternative; boundary=\"$g3\"\r\n\r\n"
+        . "--$g3\r\nContent-Type: text/plain; charset=UTF-8\r\nContent-Transfer-Encoding: base64\r\n\r\n"
         . chunk_split(base64_encode($text))
-        . "--$grenze\r\nContent-Type: application/pdf; name=\"" . str_replace('Ü', 'U', $eintrag['nummer']) . ".pdf\"\r\n"
-        . "Content-Transfer-Encoding: base64\r\nContent-Disposition: attachment; filename=\"" . str_replace('Ü', 'U', $eintrag['nummer']) . ".pdf\"\r\n\r\n"
+        . "--$g3\r\nContent-Type: text/html; charset=UTF-8\r\nContent-Transfer-Encoding: base64\r\n\r\n"
+        . chunk_split(base64_encode(str_replace('https://veroclear.de/assets/logo-symbol.png', $mitLogo ? 'cid:logo@veroclear.de' : 'https://veroclear.de/assets/logo-symbol.png', $html)))
+        . "--$g3--\r\n";
+    $inhalt = $mitLogo
+        ? "Content-Type: multipart/related; boundary=\"$g2\"\r\n\r\n"
+            . "--$g2\r\n" . $alternativ
+            . "--$g2\r\nContent-Type: image/png; name=\"logo.png\"\r\nContent-Transfer-Encoding: base64\r\n"
+            . "Content-ID: <logo@veroclear.de>\r\nContent-Disposition: inline; filename=\"logo.png\"\r\n\r\n"
+            . chunk_split(base64_encode(file_get_contents($logo)))
+            . "--$g2--\r\n"
+        : $alternativ;
+    $datei = str_replace('Ü', 'U', $eintrag['nummer']) . '.pdf';
+    $body = "--$g1\r\n" . $inhalt
+        . "--$g1\r\nContent-Type: application/pdf; name=\"$datei\"\r\n"
+        . "Content-Transfer-Encoding: base64\r\nContent-Disposition: attachment; filename=\"$datei\"\r\n\r\n"
         . chunk_split(base64_encode($pdf))
-        . "--$grenze--";
+        . "--$g1--";
     smtpSenden($cfg, $an, '=?UTF-8?B?' . base64_encode($betreff) . '?=', $body, $kopf);
+}
+
+// E-Mail-Signatur wie im Postfach (Logo, Name, Kontakt)
+function signaturHtml(): string
+{
+    return '<table cellpadding="0" cellspacing="0" border="0" style="margin-top:8px;font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:1.45;color:#0A1D19"><tr>'
+        . '<td style="padding-right:14px;vertical-align:top"><a href="https://veroclear.de"><img src="https://veroclear.de/assets/logo-symbol.png" alt="VeroClear" width="60" height="57" style="display:block;border:0"></a></td>'
+        . '<td style="border-left:2px solid #0E8A68;padding-left:14px;vertical-align:top">'
+        . '<div style="font-size:15px;font-weight:bold;color:#0A1D19">VeroClear</div>'
+        . '<div style="color:#0E8A68;font-weight:bold">Inhaber: Luca De Caro</div>'
+        . '<div style="color:#555">Entrümpelung &amp; Haushaltsauflösung zum Festpreis</div>'
+        . '<div style="margin-top:6px">Tel. <a href="tel:+491791133427" style="color:#0A1D19;text-decoration:none">+49 179 11 33 427</a> · <a href="mailto:kontakt@veroclear.de" style="color:#0A1D19;text-decoration:none">kontakt@veroclear.de</a></div>'
+        . '<div><a href="https://veroclear.de" style="color:#0E8A68;font-weight:bold;text-decoration:none">veroclear.de</a> · Friedrichstraße 10 · 78652 Deißlingen</div>'
+        . '</td></tr></table>';
 }
 
 function smtpSenden(array $cfg, string $an, string $betreff, string $body, array $header): void
