@@ -200,6 +200,24 @@ if ($aktion === 'speichern') {
     antwort(200, ['ok' => true, 'gesendet' => $versand]);
 }
 
+if ($aktion === 'loeschen') {
+    $nr = (string) ($e['nummer'] ?? '');
+    if (!preg_match('/^[AÜR]-\d{4}-\d{4}$/u', $nr)) antwort(422, ['ok' => false, 'error' => 'Ungültige Nummer']);
+    schreiben('index.json', array_values(array_filter(lesen('index.json', []), fn($x) => $x['nummer'] !== $nr)));
+    $p = pfad('protokolle/' . str_replace('Ü', 'U', $nr) . '.pdf');
+    if (is_file($p)) unlink($p);
+    antwort(200, ['ok' => true]);
+}
+
+if ($aktion === 'alles_loeschen') {
+    if (($e['bestaetigung'] ?? '') !== 'LÖSCHEN') antwort(422, ['ok' => false, 'error' => 'Nicht bestätigt']);
+    foreach (glob(pfad('protokolle') . '/*.pdf') ?: [] as $f) unlink($f);
+    schreiben('index.json', []);
+    // Nummern nur zurücksetzen, wenn ausdrücklich gewünscht (sonst doppelte Rechnungsnummern möglich)
+    if (!empty($e['nummernZuruecksetzen'])) schreiben('zaehler.json', []);
+    antwort(200, ['ok' => true]);
+}
+
 if ($aktion === 'pdf') {
     $nr = (string) ($_GET['nr'] ?? '');
     if (!preg_match('/^[AÜR]-\d{4}-\d{4}$/u', $nr)) antwort(422, ['ok' => false, 'error' => 'Ungültige Nummer']);

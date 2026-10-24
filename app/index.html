@@ -96,6 +96,12 @@
   .list { padding:4px 0; }
   .eintrag { display:flex; align-items:center; gap:12px; padding:13px 16px; color:var(--ink); text-decoration:none; border-bottom:1px solid var(--line); }
   .eintrag:last-child { border-bottom:0; }
+  .zeile { display:flex; align-items:center; border-bottom:1px solid var(--line); }
+  .zeile:last-child { border-bottom:0; }
+  .zeile .eintrag { flex:1; min-width:0; border-bottom:0; padding-right:6px; }
+  .del { flex:none; width:44px; height:44px; margin-right:8px; border:0; border-radius:12px; background:none; color:#A3B1AC; display:grid; place-items:center; cursor:pointer; }
+  .del:hover { background:var(--danger-soft); color:var(--danger); }
+  .del svg, .btn svg { width:20px; height:20px; }
   .eintrag:hover { background:#F8FAF9; }
   .eintrag .mitte { flex:1; min-width:0; }
   .eintrag .titel { font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }

@@ -34,6 +34,7 @@
     archiv: svg('<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>'),
     preise: svg('<path d="M20.6 13.4 13.4 20.6a2 2 0 0 1-2.8 0L3 13V3h10l7.6 7.6a2 2 0 0 1 0 2.8z"/><circle cx="7.5" cy="7.5" r="1.5"/>'),
     pfeil: svg('<path d="M5 12h14M13 6l6 6-6 6"/>'),
+    muell: svg('<path d="M3 6h18M8 6V4h8v2M6 6l1 14a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-14M10 11v6M14 11v6"/>'),
   };
   const TABS = [['home', 'Start'], ['besichtigung', 'Angebot', 'angebot'], ['rechnung', 'Rechnung'], ['uebergabe', 'Übergabe'], ['archiv', 'Archiv']];
   let PREISE = null;
@@ -501,12 +502,30 @@
   async function archiv() {
     seite(`<h1>Archiv</h1><input id="suche" type="search" placeholder="Kunde, Nummer oder Adresse suchen" style="margin:0 0 12px">
       <div class="filter">${[['', 'Alle'], ['Angebot', 'Angebote'], ['Rechnung', 'Rechnungen'], ['Übergabe', 'Übergaben']].map(([k, l], i) => `<button data-art="${k}"${i ? '' : ' class="an"'}>${l}</button>`).join('')}</div>
-      <div class="card list" id="liste" style="padding:0"><p class="leer">Lädt …</p></div>`);
+      <div class="card list" id="liste" style="padding:0"><p class="leer">Lädt …</p></div>
+      <div class="card" id="leeren" hidden><h2>Archiv leeren</h2>
+        <p class="note" style="margin-top:0">Löscht alle Angebote, Rechnungen und Übergaben samt PDFs – z. B. nach dem Testen. Gesendete E-Mails bleiben in den Postfächern.</p>
+        <label class="chk"><input type="checkbox" id="reset" checked> Nummern wieder bei 0001 starten</label>
+        <p class="note">Nur zurücksetzen, wenn noch keine echte Rechnung rausgegangen ist – Rechnungsnummern dürfen nicht doppelt vorkommen.</p>
+        <button class="btn sec" id="alleweg" style="color:var(--danger);border-color:var(--danger);margin-top:6px">${ICON.muell} Alle Einträge löschen</button></div>`);
     let l = [], art = '';
     const zeigen = () => {
       const q = document.getElementById('suche').value.trim().toLowerCase();
       const t = l.filter(p => (!art || p.art === art) && (!q || [p.kunde, p.nummer, p.objekt, p.email].join(' ').toLowerCase().includes(q)));
-      document.getElementById('liste').innerHTML = t.length ? t.map(eintrag).join('') : `<p class="leer">${l.length ? 'Nichts gefunden.' : 'Noch keine Angebote, Rechnungen oder Protokolle.'}</p>`;
+      document.getElementById('liste').innerHTML = t.length ? t.map(p => `<div class="zeile">${eintrag(p)}<button class="del" data-nr="${esc(p.nummer)}" aria-label="${esc(p.nummer)} löschen">${ICON.muell}</button></div>`).join('') : `<p class="leer">${l.length ? 'Nichts gefunden.' : 'Noch keine Angebote, Rechnungen oder Protokolle.'}</p>`;
+      document.getElementById('leeren').hidden = !l.length;
+    };
+    document.getElementById('liste').onclick = async e => {
+      const b = e.target.closest('.del'); if (!b) return;
+      if (!confirm(`${b.dataset.nr} endgültig löschen? Das PDF ist danach weg.`)) return;
+      try { await api('loeschen', { nummer: b.dataset.nr }); l = l.filter(p => p.nummer !== b.dataset.nr); zeigen(); }
+      catch (x) { alert(x.message); }
+    };
+    document.getElementById('alleweg').onclick = async () => {
+      const reset = document.getElementById('reset').checked;
+      if (!confirm(`Alle ${l.length} Einträge mit PDFs endgültig löschen?${reset ? ' Die Nummern starten danach wieder bei 0001.' : ''}`)) return;
+      try { await api('alles_loeschen', { bestaetigung: 'LÖSCHEN', nummernZuruecksetzen: reset }); l = []; zeigen(); }
+      catch (x) { alert(x.message); }
     };
     document.querySelector('.filter').onclick = e => { const b = e.target.closest('button'); if (!b) return; art = b.dataset.art; document.querySelectorAll('.filter button').forEach(x => x.classList.toggle('an', x === b)); zeigen(); };
     $main.oninput = zeigen;
