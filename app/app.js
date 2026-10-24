@@ -25,6 +25,17 @@
   const FIRMA_FELDER = [['steuernummer', 'Steuernummer'], ['kontoinhaber', 'Kontoinhaber'], ['iban', 'IBAN'], ['bic', 'BIC'],
     ['bank', 'Bank'], ['zahlungsziel', 'Zahlungsziel (Tage)']];
   const EINHEITEN = ['pauschal', 'Stk.', 'Std.', 'm³', 'kg', 'km', 'm²'];
+  const svg = d => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${d}</svg>`;
+  const ICON = {
+    home: svg('<path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z"/>'),
+    angebot: svg('<rect x="5" y="3" width="14" height="18" rx="2"/><path d="M9 3v2h6V3M9 11h6M9 15h4"/>'),
+    rechnung: svg('<path d="M6 2h12v20l-3-2-3 2-3-2-3 2z"/><path d="M9 7h6M9 11h6M9 15h3"/>'),
+    uebergabe: svg('<path d="M9 11l3 3 8-8"/><path d="M20 12v7a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h9"/>'),
+    archiv: svg('<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>'),
+    preise: svg('<path d="M20.6 13.4 13.4 20.6a2 2 0 0 1-2.8 0L3 13V3h10l7.6 7.6a2 2 0 0 1 0 2.8z"/><circle cx="7.5" cy="7.5" r="1.5"/>'),
+    pfeil: svg('<path d="M5 12h14M13 6l6 6-6 6"/>'),
+  };
+  const TABS = [['home', 'Start'], ['besichtigung', 'Angebot', 'angebot'], ['rechnung', 'Rechnung'], ['uebergabe', 'Übergabe'], ['archiv', 'Archiv']];
   let PREISE = null;
   let logoData = null;
 
@@ -50,11 +61,23 @@
 
   function seite(html) { $main.oninput = null; $main.onchange = null; $main.innerHTML = html; window.scrollTo(0, 0); }
   const zurueck = '<button class="back" data-go="home">← Übersicht</button>';
-  $main.addEventListener('click', e => { const g = e.target.closest('[data-go]'); if (g) { e.preventDefault(); ({ home, preise: preisSeite, besichtigung, uebergabe, rechnung, archiv })[g.dataset.go](); } });
+  const $tabs = document.getElementById('tabs');
+  $tabs.innerHTML = TABS.map(([k, l, i]) => `<button class="tab" data-go="${k}">${ICON[i || k]}<span>${l}</span></button>`).join('');
+  const aktiv = k => $tabs.querySelectorAll('.tab').forEach(t => t.classList.toggle('an', t.dataset.go === k));
+  document.addEventListener('click', e => {
+    const g = e.target.closest('[data-go]'); if (!g) return;
+    e.preventDefault(); aktiv(g.dataset.go);
+    ({ home, preise: preisSeite, besichtigung, uebergabe, rechnung, archiv })[g.dataset.go]();
+  });
+  // Archiv-Eintrag als Listenzeile
+  const eintrag = p => `<a class="eintrag" href="api.php?a=pdf&nr=${encodeURIComponent(p.nummer)}" target="_blank" rel="noopener">
+      <span class="chip ${p.art === 'Übergabe' ? 'U' : p.art[0]}">${p.art === 'Übergabe' ? 'Ü' : p.art[0]}</span>
+      <span class="mitte"><span class="titel" style="display:block">${esc(p.kunde || '–')}</span><span class="meta" style="display:block">${esc(p.nummer)} · ${new Date(p.datum).toLocaleDateString('de-DE')}${p.objekt ? ' · ' + esc(p.objekt) : ''}</span></span>
+      ${p.betrag != null ? `<span class="betrag">${eur(p.betrag)}</span>` : ''}</a>`;
 
   // ── Start / Login ──
   async function start() {
-    document.getElementById('logout').hidden = true;
+    document.getElementById('logout').hidden = true; $tabs.hidden = true;
     let s;
     try { s = await api('status'); } catch (e) { seite(`<p class="err">${esc(e.message)}</p>`); return; }
     if (s.angemeldet) return home();
@@ -76,20 +99,30 @@
   document.getElementById('logout').onclick = async () => { try { await api('logout', {}); } catch (e) { /* egal */ } start(); };
 
   async function home() {
-    document.getElementById('logout').hidden = false;
-    try { PREISE = (await api('preise')).preise; } catch (e) { seite(`<p class="err">${esc(e.message)}</p>`); return; }
-    seite(`<h1>Hallo Luca 👋</h1><div class="tiles">
-      <button class="tile" data-go="besichtigung">📝 Besichtigung<small>Aufnahme vor Ort → Festpreis-Angebot als PDF</small></button>
-      <button class="tile" data-go="uebergabe">✅ Übergabe<small>Übergabeprotokoll mit Unterschrift</small></button>
-      <button class="tile" data-go="rechnung">🧾 Rechnung<small>Rechnung aus Angebot oder neu, als PDF per E-Mail</small></button>
-      <button class="tile" data-go="preise">💶 Preisliste<small>Preise, Entsorgung, Bankdaten</small></button>
-      <button class="tile" data-go="archiv">📁 Archiv<small>Angebote, Rechnungen, Protokolle</small></button></div>`);
+    document.getElementById('logout').hidden = false; $tabs.hidden = false; aktiv('home');
+    let liste = [];
+    try { [PREISE, liste] = await Promise.all([api('preise').then(r => r.preise), api('liste').then(r => r.protokolle).catch(() => [])]); }
+    catch (e) { seite(`<p class="err">${esc(e.message)}</p>`); return; }
+    const jetzt = new Date(), monat = liste.filter(p => { const d = new Date(p.datum); return d.getMonth() === jetzt.getMonth() && d.getFullYear() === jetzt.getFullYear(); });
+    const anz = art => monat.filter(p => p.art === art).length;
+    const umsatz = monat.filter(p => p.art === 'Rechnung').reduce((t, p) => t + (p.betrag || 0), 0);
+    const kachel = (go, titel, text, ico = go) => `<button class="tile" data-go="${go}"><span class="ico">${ICON[ico]}</span><span>${titel}<small>${text}</small></span></button>`;
+    seite(`<div class="hello"><h1>Hallo Luca</h1><span class="datum">${jetzt.toLocaleDateString('de-DE', { weekday: 'long', day: 'numeric', month: 'long' })}</span></div>
+      <div class="tiles">
+        <button class="tile gross" data-go="besichtigung"><span class="ico">${ICON.angebot}</span><span>Neue Besichtigung<small>Vor Ort aufnehmen und Festpreis-Angebot senden</small></span><span class="pfeil">${ICON.pfeil}</span></button>
+        ${kachel('rechnung', 'Rechnung', 'Aus Angebot oder neu')}
+        ${kachel('uebergabe', 'Übergabe', 'Protokoll mit Unterschrift')}
+        <button class="tile zeile" data-go="preise"><span class="ico">${ICON.preise}</span><span>Preise & Firma<small>Preise, Entsorgung, Bankdaten, Umsatzsteuer</small></span><span class="pfeil">${ICON.pfeil}</span></button></div>
+      <div class="abschnitt"><h2>Dieser Monat</h2></div>
+      <div class="stats"><div class="stat"><b>${anz('Angebot')}</b><span>Angebote</span></div><div class="stat"><b>${anz('Rechnung')}</b><span>Rechnungen</span></div><div class="stat"><b>${Math.round(umsatz).toLocaleString('de-DE')} €</b><span>Umsatz</span></div></div>
+      <div class="abschnitt"><h2>Zuletzt</h2>${liste.length ? '<button data-go="archiv">Alle ansehen</button>' : ''}</div>
+      <div class="card list" style="padding:0">${liste.length ? liste.slice(0, 5).map(eintrag).join('') : '<p class="leer">Noch nichts erstellt. Starte mit einer Besichtigung.</p>'}</div>`);
   }
 
   // ── Preisliste ──
   function preisSeite() {
     const feld = (g, [k, l]) => `<label>${l}<input type="text" inputmode="decimal" step="0.01" min="0" data-g="${g}" data-k="${k}" value="${PREISE[g][k]}"></label>`;
-    seite(`${zurueck}<h1>Preisliste</h1>
+    seite(`${zurueck}<h1>Preise & Firma</h1><p class="sub">Preise, Entsorgungskosten, Bankdaten und Umsatzsteuer.</p>
       <div class="card"><h2>Richtpreise (nur für dich, z. B. für Telefonauskünfte)</h2><div class="grid">${AB_FELDER.map(f => feld('ab', f)).join('')}</div></div>
       <div class="card"><h2>Entsorgungskosten (Preise deines Entsorgers, netto)</h2>
         <div class="rows">${FRAKTIONEN.map(([k, l]) => `<div class="row" style="grid-template-columns:1fr 1fr"><label>${l}: € pro Tonne<input type="text" inputmode="decimal" step="0.01" min="0" data-g="entsorgung" data-k="${k}" value="${PREISE.entsorgung[k]}"></label><label>Gewicht: Tonnen pro m³<input type="text" inputmode="decimal" step="0.01" min="0" data-g="dichte" data-k="${k}" value="${PREISE.dichte[k]}"></label></div>`).join('')}</div>
@@ -115,7 +148,7 @@
   // ── Fotos & Unterschrift ──
   function fotoFeld(id, liste) {
     const box = document.getElementById(id);
-    box.innerHTML = `<label class="btn sec small" style="display:inline-flex;width:auto">📷 Foto hinzufügen<input type="file" accept="image/*" capture="environment" multiple hidden></label><div class="fotos"></div><p class="note">Max. 12 Fotos, werden verkleinert ins PDF übernommen.</p>`;
+    box.innerHTML = `<label class="btn sec small" style="display:inline-flex;width:auto">+ Foto hinzufügen<input type="file" accept="image/*" capture="environment" multiple hidden></label><div class="fotos"></div><p class="note">Max. 12 Fotos, werden verkleinert ins PDF übernommen.</p>`;
     const grid = box.querySelector('.fotos');
     const zeichnen = () => { grid.innerHTML = liste.map((f, i) => `<div><img src="${f}"><button data-i="${i}">×</button></div>`).join(''); };
     grid.onclick = e => { const b = e.target.closest('button[data-i]'); if (b) { liste.splice(+b.dataset.i, 1); zeichnen(); } };
@@ -162,7 +195,7 @@
   function besichtigung() {
     const fotos = [];
     const K = PREISE.kalkulation;
-    seite(`${zurueck}<h1>Besichtigung</h1>
+    seite(`<h1>Besichtigung</h1><p class="sub">Aufnahme vor Ort – daraus entsteht das Festpreis-Angebot.</p>
       <div class="card"><h2>Kunde</h2><div class="grid">
         <label>Name *<input id="kname" autocomplete="off"></label><label>Telefon<input id="ktel" type="tel"></label>
         <label>E-Mail<input id="kmail" type="email"></label><label class="breit">Anschrift Kunde<textarea id="kadr" rows="2" placeholder="Straße Hausnummer, PLZ Ort"></textarea></label></div></div>
@@ -181,7 +214,7 @@
         <label style="max-width:260px">Eingabe in<select id="einheit"><option value="kg" selected>Kilogramm (kg) – wie beim Entsorger</option><option value="m3">Kubikmeter (m³)</option></select></label>
         <div class="grid" style="margin-top:10px">${FRAKTIONEN.map(([k, l]) => `<label>${l} <span class="einh">kg</span><input type="text" inputmode="decimal" min="0" data-m3="${k}"></label>`).join('')}</div>
         <p class="note">Richtwerte: Sofa 40–60 kg · Kleiderschrank 60–100 kg · Bett mit Matratze 50–80 kg · Matratze 15–25 kg · Tisch 20–40 kg · Stuhl 5–8 kg · Waschmaschine 70 kg · Kühlschrank 40–60 kg · Fernseher 10–20 kg · voller Umzugskarton 15–20 kg · Teppich 10–30 kg. Nach jeder Fuhre kannst du mit dem Wiegeschein von Schuler vergleichen.</p>
-        <p class="note"><b>Leer lassen</b> = die App schätzt die Menge aus Fläche und „Wie voll ist es?“. Sobald du hier Werte einträgst, wird damit gerechnet. Die App vergleicht immer mit dem Flächenpreis (€/m²) und nimmt den höheren Wert.</p><p class="note">Arbeit & Transport: ${eur(K.proM3)}/m³. Entsorgung wird je Abfallart nach den Preisen deines Entsorgers berechnet (Preisliste).</p><div id="entsinfo" class="note"></div></div>
+        <p class="note"><b>Leer lassen</b> = die App schätzt die Menge aus Fläche und „Wie voll ist es?“. Sobald du hier Werte einträgst, wird damit gerechnet. Die App vergleicht immer mit dem Flächenpreis (€/m²) und nimmt den höheren Wert.</p><p class="note">Arbeit & Transport: ${eur(K.proM3)}/m³. Entsorgung wird je Abfallart nach den Preisen deines Entsorgers berechnet (Preise & Firma).</p><div id="entsinfo" class="note"></div></div>
       <div class="card"><h2>Zusatzleistungen</h2>
         <label class="chk"><input type="checkbox" id="zk"> Küchendemontage (${eur(K.kueche)})</label>
         <div class="grid"><label>Kühl-/Klimageräte (Stück, je ${eur(K.kuehlgeraet)})<input id="zkg" type="text" inputmode="numeric"></label>
@@ -315,9 +348,11 @@
   }
 
   function fertig(nummer, gesendet, pdf) {
-    seite(`${zurueck}<h1>Fertig ✅</h1><div class="card"><p><b>${esc(nummer)}</b> wurde gespeichert.</p>
-      <p>${gesendet && gesendet.length ? 'Per E-Mail gesendet an: ' + gesendet.map(esc).join(', ') : '<span class="err">E-Mail-Versand fehlgeschlagen – das PDF ist trotzdem im Archiv.</span>'}</p>
-      <a class="btn sec" href="${pdf}" download="${esc(nummer.replace('Ü', 'U'))}.pdf">PDF ansehen / speichern</a><p></p><button class="btn" data-go="home">Zur Übersicht</button></div>`);
+    seite(`<div class="card" style="text-align:center;padding:28px 20px">
+      <div style="width:64px;height:64px;margin:0 auto 14px;border-radius:50%;background:var(--accent-soft);color:var(--accent);display:grid;place-items:center">${ICON.uebergabe}</div>
+      <h1 style="margin:0 0 6px">Fertig</h1><p style="margin:0 0 16px"><b>${esc(nummer)}</b> wurde gespeichert.</p>
+      ${gesendet && gesendet.length ? `<p class="ok">Gesendet an: ${gesendet.map(esc).join(', ')}</p>` : '<p class="err">E-Mail-Versand fehlgeschlagen – das PDF ist trotzdem im Archiv.</p>'}
+      <div style="display:grid;gap:10px;margin-top:18px"><a class="btn sec" href="${pdf}" download="${esc(nummer.replace('Ü', 'U'))}.pdf">PDF ansehen / speichern</a><button class="btn" data-go="home">Zur Übersicht</button></div></div>`);
   }
 
   // ── Übergabe ──
@@ -325,7 +360,7 @@
     const fotos = [];
     let angebote = [];
     try { angebote = (await api('liste')).protokolle.filter(p => p.art === 'Angebot'); } catch (e) { /* ohne Vorlage */ }
-    seite(`${zurueck}<h1>Übergabeprotokoll</h1>
+    seite(`<h1>Übergabe</h1><p class="sub">Protokoll mit Unterschrift des Kunden.</p>
       <div class="card"><label>Aus Angebot übernehmen<select id="vorlage"><option value="">– neu –</option>${angebote.map((a, i) => `<option value="${i}">${esc(a.nummer)} · ${esc(a.kunde)} · ${esc(a.objekt)}</option>`).join('')}</select></label></div>
       <div class="card"><h2>Kunde & Objekt</h2><div class="grid">
         <label>Name *<input id="kname"></label><label>E-Mail<input id="kmail" type="email"></label>
@@ -385,8 +420,8 @@
     let angebote = [];
     try { angebote = (await api('liste')).protokolle.filter(p => p.art === 'Angebot'); } catch (e) { /* ohne Vorlage */ }
     const F = PREISE.firma || {}, ziel = Math.max(0, Math.floor(num(F.zahlungsziel || 14)));
-    seite(`${zurueck}<h1>Rechnung</h1>
-      ${!F.steuernummer || !F.iban ? '<div class="card"><p class="err">Steuernummer oder IBAN fehlt noch – bitte unter „Preisliste“ eintragen.</p></div>' : ''}
+    seite(`<h1>Rechnung</h1><p class="sub">Netto eingeben – Umsatzsteuer und Summe rechnet die App.</p>
+      ${!F.steuernummer || !F.iban ? '<div class="card"><p class="err">Steuernummer oder IBAN fehlt noch – bitte unter „Preise & Firma“ eintragen.</p></div>' : ''}
       <div class="card"><label>Aus Angebot übernehmen<select id="vorlage"><option value="">– neu –</option>${angebote.map((a, i) => `<option value="${i}">${esc(a.nummer)} · ${esc(a.kunde)} · ${a.betrag != null ? eur(a.betrag) : ''}</option>`).join('')}</select></label>
         <label style="margin-top:10px">Umsatzsteuer<select id="ust"><option value="regel"${F.ustModus !== 'klein' ? ' selected' : ''}>zzgl. 19 % Umsatzsteuer</option><option value="klein"${F.ustModus === 'klein' ? ' selected' : ''}>Kleinunternehmer (§ 19 UStG) – keine Umsatzsteuer</option></select></label></div>
       <div class="card"><h2>Rechnungsempfänger</h2><div class="grid">
@@ -464,13 +499,18 @@
 
   // ── Archiv ──
   async function archiv() {
-    seite(`${zurueck}<h1>Archiv</h1><div class="card list" id="liste"><p class="note">Lädt …</p></div>`);
-    try {
-      const l = (await api('liste')).protokolle;
-      document.getElementById('liste').innerHTML = l.length ? l.map(p => `<a href="api.php?a=pdf&nr=${encodeURIComponent(p.nummer)}" target="_blank" rel="noopener">
-        <b>${esc(p.nummer)}</b> · ${esc(p.art)} · ${esc(p.kunde)}${p.betrag != null ? ' · ' + eur(p.betrag) : ''}
-        <span>${new Date(p.datum).toLocaleString('de-DE')} · ${esc(p.objekt)}${p.gesendet && p.gesendet.length ? ' · gesendet' : ''}</span></a>`).join('') : '<p class="note">Noch keine Protokolle.</p>';
-    } catch (e) { document.getElementById('liste').innerHTML = `<p class="err">${esc(e.message)}</p>`; }
+    seite(`<h1>Archiv</h1><input id="suche" type="search" placeholder="Kunde, Nummer oder Adresse suchen" style="margin:0 0 12px">
+      <div class="filter">${[['', 'Alle'], ['Angebot', 'Angebote'], ['Rechnung', 'Rechnungen'], ['Übergabe', 'Übergaben']].map(([k, l], i) => `<button data-art="${k}"${i ? '' : ' class="an"'}>${l}</button>`).join('')}</div>
+      <div class="card list" id="liste" style="padding:0"><p class="leer">Lädt …</p></div>`);
+    let l = [], art = '';
+    const zeigen = () => {
+      const q = document.getElementById('suche').value.trim().toLowerCase();
+      const t = l.filter(p => (!art || p.art === art) && (!q || [p.kunde, p.nummer, p.objekt, p.email].join(' ').toLowerCase().includes(q)));
+      document.getElementById('liste').innerHTML = t.length ? t.map(eintrag).join('') : `<p class="leer">${l.length ? 'Nichts gefunden.' : 'Noch keine Angebote, Rechnungen oder Protokolle.'}</p>`;
+    };
+    document.querySelector('.filter').onclick = e => { const b = e.target.closest('button'); if (!b) return; art = b.dataset.art; document.querySelectorAll('.filter button').forEach(x => x.classList.toggle('an', x === b)); zeigen(); };
+    $main.oninput = zeigen;
+    try { l = (await api('liste')).protokolle; zeigen(); } catch (e) { document.getElementById('liste').innerHTML = `<p class="err">${esc(e.message)}</p>`; }
   }
 
   // ── PDF ──
