@@ -135,7 +135,9 @@
         <label class="breit">Umsatzsteuer auf Rechnungen<select data-f="ustModus"><option value="regel"${(PREISE.firma || {}).ustModus !== 'klein' ? ' selected' : ''}>zzgl. 19 % Umsatzsteuer (Standard)</option><option value="klein"${(PREISE.firma || {}).ustModus === 'klein' ? ' selected' : ''}>Kleinunternehmer (§ 19 UStG) – keine Umsatzsteuer</option></select></label></div>
         <p class="note">Die Steuernummer bekommst du vom Finanzamt nach der Anmeldung. Ohne Steuernummer ist eine Rechnung nicht vollständig.</p>
         <p class="note">Mit 19 % Umsatzsteuer kreuzt du im Fragebogen zur steuerlichen Erfassung „Verzicht auf die Kleinunternehmerregelung“ an. Dann bekommst du auch die Umsatzsteuer auf Entsorgung, Transporter und Material vom Finanzamt zurück (Vorsteuer).</p></div>
+      <div class="card"><h2>Lexware Office</h2><div id="lexbox"><p class="note">Lädt …</p></div></div>
       <div id="msg"></div><button class="btn" id="save">Speichern</button>`);
+    lexwareKarte();
     document.getElementById('save').onclick = async () => {
       const neu = { ab: {}, kalkulation: {}, entsorgung: {}, dichte: {}, firma: {} };
       document.querySelectorAll('[data-g]').forEach(i => { neu[i.dataset.g][i.dataset.k] = num(i.value); });
@@ -143,6 +145,28 @@
       const msg = document.getElementById('msg');
       try { PREISE = (await api('preise_speichern', neu)).preise; msg.innerHTML = '<p class="ok">Gespeichert.</p>'; }
       catch (e) { msg.innerHTML = `<p class="err">${esc(e.message)}</p>`; }
+    };
+  }
+
+  // Verbindung zu Lexware Office: Schlüssel bleibt auf dem Server, die App sieht nur „verbunden“
+  async function lexwareKarte() {
+    const box = document.getElementById('lexbox'); if (!box) return;
+    let st;
+    try { st = await api('lexware_status'); } catch (e) { box.innerHTML = `<p class="err">${esc(e.message)}</p>`; return; }
+    if (st.verbunden) {
+      box.innerHTML = `<p class="ok" style="margin-top:0">Verbunden${st.firma ? ' mit ' + esc(st.firma) : ''}</p>
+        <p class="note">Jede neue Rechnung wird automatisch als Einnahme-Beleg mit PDF in Lexware angelegt. Rechnungen schreibst du nur noch hier in der App.</p>
+        <button class="btn sec small" id="lextrennen">Verbindung trennen</button>`;
+      document.getElementById('lextrennen').onclick = async () => { if (confirm('Verbindung zu Lexware trennen?')) { await api('lexware_trennen', {}); lexwareKarte(); } };
+      return;
+    }
+    box.innerHTML = `<p class="note" style="margin-top:0">Damit jede Rechnung automatisch in Lexware landet: In Lexware Office unter <b>Einstellungen → Erweiterungen → Public API</b> einen API-Schlüssel erstellen und hier einfügen.</p>
+      <label>API-Schlüssel<input id="lexkey" type="password" autocomplete="off" spellcheck="false"></label>
+      <div id="lexmsg"></div><button class="btn small" id="lexok" style="margin-top:10px">Mit Lexware verbinden</button>`;
+    document.getElementById('lexok').onclick = async () => {
+      const m = document.getElementById('lexmsg');
+      try { await api('lexware_verbinden', { schluessel: document.getElementById('lexkey').value }); lexwareKarte(); }
+      catch (e) { m.innerHTML = `<p class="err">${esc(e.message)}</p>`; }
     };
   }
 
@@ -348,12 +372,19 @@
     };
   }
 
-  function fertig(nummer, gesendet, pdf) {
+  function fertig(nummer, gesendet, pdf, lexware) {
     seite(`<div class="card" style="text-align:center;padding:28px 20px">
       <div style="width:64px;height:64px;margin:0 auto 14px;border-radius:50%;background:var(--accent-soft);color:var(--accent);display:grid;place-items:center">${ICON.uebergabe}</div>
       <h1 style="margin:0 0 6px">Fertig</h1><p style="margin:0 0 16px"><b>${esc(nummer)}</b> wurde gespeichert.</p>
       ${gesendet && gesendet.length ? `<p class="ok">Gesendet an: ${gesendet.map(esc).join(', ')}</p>` : '<p class="err">E-Mail-Versand fehlgeschlagen – das PDF ist trotzdem im Archiv.</p>'}
+      ${lexware ? `<div id="lexmsg">${lexware === 'ok' ? '<p class="ok">In Lexware Office als Beleg angelegt</p>' : `<p class="err">Lexware: ${esc(lexware)}</p><button class="btn sec small" id="lexneu" style="margin-top:8px">Erneut an Lexware senden</button>`}</div>` : ''}
       <div style="display:grid;gap:10px;margin-top:18px"><a class="btn sec" href="${pdf}" download="${esc(nummer.replace('Ü', 'U'))}.pdf">PDF ansehen / speichern</a><button class="btn" data-go="home">Zur Übersicht</button></div></div>`);
+    const neu = document.getElementById('lexneu');
+    if (neu) neu.onclick = async () => {
+      neu.disabled = true; neu.textContent = 'Wird gesendet …';
+      try { const r = await api('lexware_senden', { nummer }); document.getElementById('lexmsg').innerHTML = r.lexware === 'ok' ? '<p class="ok">In Lexware Office als Beleg angelegt</p>' : `<p class="err">Lexware: ${esc(r.lexware)}</p>`; }
+      catch (e) { document.getElementById('lexmsg').innerHTML = `<p class="err">${esc(e.message)}</p>`; }
+    };
   }
 
   // ── Übergabe ──
@@ -492,8 +523,8 @@
           pos, ...s, mitUst: mitUst(), lohn: Math.min(num(v('lohn')), s.brutto), faellig: plusTage(tage), tage };
         const pdf = await rechnungPdf(d);
         const res = await api('speichern', { nummer, pdf, kunde: d.kunde.name, email: d.kunde.mail, telefon: '', objekt: d.lort || d.kunde.adr, betrag: s.brutto,
-          anKunde: document.getElementById('ankunde').checked, daten: { bezug: d.bezug, faellig: d.faellig, ldat: d.ldat, netto: s.netto, ust: s.ust } });
-        fertig(nummer, res.gesendet, pdf);
+          anKunde: document.getElementById('ankunde').checked, daten: { bezug: d.bezug, faellig: d.faellig, ldat: d.ldat, rdat: d.rdat, netto: s.netto, ust: s.ust } });
+        fertig(nummer, res.gesendet, pdf, res.lexware);
       } catch (e) { msg.innerHTML = `<p class="err">${esc(e.message)}</p>`; btn.disabled = false; btn.textContent = 'Rechnung erstellen'; }
     };
   }

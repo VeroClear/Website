@@ -8,6 +8,8 @@ const SMTP_CONFIG = __DIR__ . '/../../veroclear-mail.php';
 const FIRMA_EMAIL = 'kontakt@veroclear.de';
 const MAX_FEHLVERSUCHE = 5;      // pro 15 Minuten
 const MAX_PDF_BYTES = 25000000;  // 25 MB
+const LEXWARE_URL = 'https://api.lexware.io';
+const LEXWARE_EINNAHMEN = '8f8664a1-fd86-11e1-a21f-0800200c9a66';  // Buchungskategorie „Einnahmen“
 
 session_set_cookie_params(['lifetime' => 0, 'path' => '/app/', 'secure' => true, 'httponly' => true, 'samesite' => 'Strict']);
 session_name('vcapp');
@@ -193,11 +195,51 @@ if ($aktion === 'speichern') {
         }
     }
     $eintrag['gesendet'] = $versand;
+    // Rechnungen automatisch als Beleg nach Lexware Office
+    $lex = null;
+    if ($eintrag['art'] === 'Rechnung' && lexwareSchluessel()) {
+        $lex = lexwareSenden($eintrag, $pdf);
+        $eintrag['lexware'] = $lex;
+    }
     $idx = lesen('index.json', []);
     $idx = array_values(array_filter($idx, fn($x) => $x['nummer'] !== $nr));
     $idx[] = $eintrag;
     schreiben('index.json', $idx);
-    antwort(200, ['ok' => true, 'gesendet' => $versand]);
+    antwort(200, ['ok' => true, 'gesendet' => $versand, 'lexware' => $lex]);
+}
+
+// ── Lexware Office ──
+if ($aktion === 'lexware_status') {
+    $k = lesen('lexware.json', []);
+    antwort(200, ['ok' => true, 'verbunden' => !empty($k['schluessel']), 'firma' => $k['firma'] ?? '']);
+}
+
+if ($aktion === 'lexware_verbinden') {
+    $schluessel = trim((string) ($e['schluessel'] ?? ''));
+    if (!preg_match('/^\S{20,300}$/', $schluessel)) antwort(422, ['ok' => false, 'error' => 'Der API-Schlüssel sieht nicht richtig aus.']);
+    [$code, $profil] = lexware('GET', '/v1/profile', $schluessel);
+    if ($code !== 200) antwort(422, ['ok' => false, 'error' => "Lexware hat den Schlüssel abgelehnt (Fehler $code)."]);
+    $firma = (string) ($profil['companyName'] ?? '');
+    schreiben('lexware.json', ['schluessel' => $schluessel, 'firma' => $firma, 'seit' => date('c')]);
+    antwort(200, ['ok' => true, 'firma' => $firma]);
+}
+
+if ($aktion === 'lexware_trennen') {
+    $p = pfad('lexware.json');
+    if (is_file($p)) unlink($p);
+    antwort(200, ['ok' => true]);
+}
+
+if ($aktion === 'lexware_senden') {
+    $nr = (string) ($e['nummer'] ?? '');
+    $idx = lesen('index.json', []);
+    $i = array_search($nr, array_column($idx, 'nummer'), true);
+    if ($i === false || $idx[$i]['art'] !== 'Rechnung') antwort(404, ['ok' => false, 'error' => 'Rechnung nicht gefunden']);
+    if (!lexwareSchluessel()) antwort(422, ['ok' => false, 'error' => 'Lexware ist nicht verbunden.']);
+    $pdf = (string) @file_get_contents(pfad('protokolle/' . $idx[$i]['datei']));
+    $idx[$i]['lexware'] = lexwareSenden($idx[$i], $pdf);
+    schreiben('index.json', $idx);
+    antwort(200, ['ok' => true, 'lexware' => $idx[$i]['lexware']]);
 }
 
 if ($aktion === 'loeschen') {
@@ -230,6 +272,73 @@ if ($aktion === 'pdf') {
 }
 
 antwort(404, ['ok' => false, 'error' => 'Unbekannte Aktion']);
+
+// ── Lexware Office API ──
+
+function lexwareSchluessel(): string
+{
+    return (string) (lesen('lexware.json', [])['schluessel'] ?? '');
+}
+
+/** @return array{0:int,1:array} HTTP-Status und JSON-Antwort */
+function lexware(string $methode, string $pfad, string $schluessel, $body = null, bool $datei = false): array
+{
+    $c = curl_init(LEXWARE_URL . $pfad);
+    $kopf = ['Authorization: Bearer ' . $schluessel, 'Accept: application/json'];
+    if ($body !== null && !$datei) { $kopf[] = 'Content-Type: application/json'; $body = json_encode($body, JSON_UNESCAPED_UNICODE); }
+    curl_setopt_array($c, [CURLOPT_CUSTOMREQUEST => $methode, CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 25, CURLOPT_HTTPHEADER => $kopf]);
+    if ($body !== null) curl_setopt($c, CURLOPT_POSTFIELDS, $body);
+    $antwort = curl_exec($c);
+    $code = (int) curl_getinfo($c, CURLINFO_HTTP_CODE);
+    curl_close($c);
+    return [$code, json_decode((string) $antwort, true) ?: []];
+}
+
+function lexwareDatum(?string $de): ?string
+{
+    return $de && preg_match('/^(\d{1,2})\.(\d{1,2})\.(\d{4})$/', trim($de), $m) ? sprintf('%04d-%02d-%02d', $m[3], $m[2], $m[1]) : null;
+}
+
+/** Legt die Rechnung als Einnahme-Beleg an und hängt das PDF an. Gibt 'ok' oder eine Fehlermeldung zurück. */
+function lexwareSenden(array $eintrag, string $pdf): string
+{
+    $d = is_array($eintrag['daten'] ?? null) ? $eintrag['daten'] : [];
+    $brutto = round((float) ($eintrag['betrag'] ?? 0), 2);
+    $ust = round((float) ($d['ust'] ?? 0), 2);
+    $netto = round($brutto - $ust, 2);
+    $beleg = [
+        'type' => 'salesinvoice',
+        'voucherStatus' => 'open',
+        'voucherNumber' => $eintrag['nummer'],
+        'voucherDate' => lexwareDatum($d['rdat'] ?? null) ?? date('Y-m-d'),
+        'totalGrossAmount' => $brutto,
+        'totalTaxAmount' => $ust,
+        'taxType' => 'net',
+        'useCollectiveContact' => true,
+        'contactName' => mb_substr((string) ($eintrag['kunde'] ?: 'Kunde'), 0, 100),
+        'remark' => mb_substr('VeroClear-App' . ($eintrag['objekt'] ? ' · ' . $eintrag['objekt'] : ''), 0, 250),
+        'voucherItems' => [['amount' => $netto, 'taxAmount' => $ust, 'taxRatePercent' => $ust > 0 ? 19 : 0, 'categoryId' => LEXWARE_EINNAHMEN]],
+    ];
+    if ($l = lexwareDatum($d['ldat'] ?? null)) $beleg['shippingDate'] = $l;
+    if ($f = lexwareDatum($d['faellig'] ?? null)) $beleg['dueDate'] = $f;
+    try {
+        $k = lexwareSchluessel();
+        [$code, $res] = lexware('POST', '/v1/vouchers', $k, $beleg);
+        if ($code !== 200 && $code !== 201 || empty($res['id'])) {
+            $grund = $res['IssueList'][0]['i18nKey'] ?? ($res['message'] ?? '');
+            return "Fehler $code" . ($grund ? " ($grund)" : '');
+        }
+        $tmp = tempnam(sys_get_temp_dir(), 'vc');
+        file_put_contents($tmp, $pdf);
+        [$code2] = lexware('POST', '/v1/vouchers/' . $res['id'] . '/files', $k,
+            ['file' => new CURLFile($tmp, 'application/pdf', str_replace('Ü', 'U', $eintrag['nummer']) . '.pdf')], true);
+        unlink($tmp);
+        return $code2 >= 200 && $code2 < 300 ? 'ok' : "Beleg angelegt, PDF fehlt (Fehler $code2)";
+    } catch (Throwable $t) {
+        error_log('veroclear-app lexware: ' . $t->getMessage());
+        return 'Keine Verbindung zu Lexware';
+    }
+}
 
 // ── E-Mail ──
 function mailMitPdf(string $an, array $eintrag, string $pdf): void
