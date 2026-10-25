@@ -38,6 +38,9 @@
     muell: svg('<path d="M3 6h18M8 6V4h8v2M6 6l1 14a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-14M10 11v6M14 11v6"/>'),
   };
   const TABS = [['home', 'Start'], ['besichtigung', 'Angebot', 'angebot'], ['rechnung', 'Rechnung'], ['uebergabe', 'Übergabe'], ['archiv', 'Archiv']];
+  // Marktvergleich Okt. 2026 (Rechner-Portal, Clean Invoice): Flächenpreise netto, Richtpreise brutto
+  const MARKTPREISE = { kalkulation: { m2Wenig: 20, m2Normal: 28, m2Stark: 38, m2Messie: 55, m2Buero: 18 },
+    ab: { keller: 340, garage: 670, dachboden: 840, wohnung40: 1340, wohnung60: 1990, wohnung80: 2670, wohnung100: 3330, haus: 3490, buero: 1790 } };
   let PREISE = null;
   let logoData = null;
 
@@ -171,7 +174,9 @@
   function preisSeite() {
     const feld = (g, [k, l]) => `<label>${l}<input type="text" inputmode="decimal" step="0.01" min="0" data-g="${g}" data-k="${k}" value="${PREISE[g][k]}"></label>`;
     seite(`${zurueck}<h1>Preise & Firma</h1><p class="sub">Preise, Entsorgungskosten, Bankdaten und Umsatzsteuer.</p>
-      <div class="card"><h2>Richtpreise (nur für dich, z. B. für Telefonauskünfte)</h2><div class="grid">${AB_FELDER.map(f => feld('ab', f)).join('')}</div></div>
+      <div class="card"><h2>Marktpreise Oktober 2026</h2><p class="note" style="margin-top:0">Flächenpreise netto: wenig 20 € · normal 28 € · stark 38 € · Messie 55 € · Büro 18 € je m². Richtpreise brutto passend dazu (z. B. Wohnung 60 m² ≈ 1.990 €). Damit liegst du im unteren Mittelfeld – günstiger als Online-Rechner (80 m² ab 2.640 €), aber nicht unter Wert.</p>
+        <button class="btn sec small" id="markt">Marktpreise eintragen</button><p class="note" id="marktinfo"></p></div>
+      <div class="card"><h2>Richtpreise brutto (nur für dich, z. B. für Telefonauskünfte)</h2><div class="grid">${AB_FELDER.map(f => feld('ab', f)).join('')}</div></div>
       <div class="card"><h2>Entsorgungskosten (Preise deines Entsorgers, netto)</h2>
         <div class="rows">${FRAKTIONEN.map(([k, l]) => `<div class="row" style="grid-template-columns:1fr 1fr"><label>${l}: € pro Tonne<input type="text" inputmode="decimal" step="0.01" min="0" data-g="entsorgung" data-k="${k}" value="${PREISE.entsorgung[k]}"></label><label>Gewicht: Tonnen pro m³<input type="text" inputmode="decimal" step="0.01" min="0" data-g="dichte" data-k="${k}" value="${PREISE.dichte[k]}"></label></div>`).join('')}</div>
         <div class="grid"><label>Übernahmeschein je Anlieferung (€)<input type="text" inputmode="decimal" step="0.01" min="0" data-g="entsorgung" data-k="uebernahmeschein" value="${PREISE.entsorgung.uebernahmeschein}"></label></div>
@@ -186,6 +191,11 @@
       <div class="card"><h2>Lexware Office</h2><div id="lexbox"><p class="note">Lädt …</p></div></div>
       <div id="msg"></div><button class="btn" id="save">Speichern</button>`);
     lexwareKarte(); passkeyKarte();
+    document.getElementById('markt').onclick = () => {
+      let n = 0;
+      Object.entries(MARKTPREISE).forEach(([g, werte]) => Object.entries(werte).forEach(([k, v]) => { const i = document.querySelector(`[data-g="${g}"][data-k="${k}"]`); if (i && num(i.value) !== v) { i.value = v; i.style.borderColor = 'var(--accent)'; n++; } }));
+      document.getElementById('marktinfo').innerHTML = n ? `<b>${n} Werte geändert</b> (grün markiert) – unten auf <b>Speichern</b> tippen.` : 'Deine Preise entsprechen schon den Marktpreisen.';
+    };
     document.getElementById('save').onclick = async () => {
       const neu = { ab: {}, kalkulation: {}, entsorgung: {}, dichte: {}, firma: {} };
       document.querySelectorAll('[data-g]').forEach(i => { neu[i.dataset.g][i.dataset.k] = num(i.value); });

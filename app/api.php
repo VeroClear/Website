@@ -50,12 +50,13 @@ function schreiben(string $name, $daten): void
 function standardPreise(): array
 {
     return [
-        'ab' => ['keller' => 290, 'garage' => 360, 'dachboden' => 450, 'wohnung40' => 720, 'wohnung60' => 1080,
-                 'wohnung80' => 1440, 'wohnung100' => 1800, 'haus' => 2430, 'buero' => 1500,
+        // Richtpreise brutto inkl. 19 % USt (Fläche × 28 €/m² netto), Stand Okt. 2026
+        'ab' => ['keller' => 340, 'garage' => 670, 'dachboden' => 840, 'wohnung40' => 1340, 'wohnung60' => 1990,
+                 'wohnung80' => 2670, 'wohnung100' => 3330, 'haus' => 3490, 'buero' => 1790,
                  'sperrmuellM3' => 95, 'sperrmuellMin' => 149],
         'kalkulation' => ['proM3' => 30, 'mindestauftrag' => 0,
                           // Flächenpreise je Füllgrad (Marktmitte), Vergleich zur Kostenrechnung
-                          'm2Wenig' => 18, 'm2Normal' => 24, 'm2Stark' => 33, 'm2Messie' => 46, 'm2Buero' => 15,
+                          'm2Wenig' => 20, 'm2Normal' => 28, 'm2Stark' => 38, 'm2Messie' => 55, 'm2Buero' => 18,
                           'etageProzent' => 7, 'trageweg' => 50, 'halteverbot' => 120, 'kueche' => 250,
                           'kuehlgeraet' => 30, 'sonderPosition' => 150, 'bigBag' => 150, 'stundensatz' => 50,
                           'spritpreis' => 2.25, 'verbrauch' => 10, 'reinigungProM2' => 3, 'expressProzent' => 15],
