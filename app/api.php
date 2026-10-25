@@ -70,6 +70,32 @@ function standardPreise(): array
     ];
 }
 
+function b64url(string $bin): string
+{
+    return rtrim(strtr(base64_encode($bin), '+/', '-_'), '=');
+}
+
+function b64urlDecode(string $s): string
+{
+    return (string) base64_decode(strtr($s, '-_', '+/') . str_repeat('=', (4 - strlen($s) % 4) % 4), true);
+}
+
+// Passkeys gelten für die Domain ohne „www.“, z. B. veroclear.de
+function rpId(): string
+{
+    return (string) preg_replace('/^www\./', '', strtolower(explode(':', (string) ($_SERVER['HTTP_HOST'] ?? 'veroclear.de'))[0]));
+}
+
+// Prüft Typ, Herkunft und die Challenge aus dieser Sitzung (5 Minuten gültig)
+function clientDataOk(string $cdj, string $typ): bool
+{
+    $c = json_decode($cdj, true);
+    $erwartet = (string) ($_SESSION['pk_challenge'] ?? '');
+    return is_array($c) && ($c['type'] ?? '') === $typ && $erwartet !== '' && hash_equals($erwartet, (string) ($c['challenge'] ?? ''))
+        && ($_SESSION['pk_zeit'] ?? 0) > time() - 300
+        && in_array($c['origin'] ?? '', ['https://' . rpId(), 'https://www.' . rpId()], true);
+}
+
 function eingeloggt(): bool
 {
     return !empty($_SESSION['ok']) && ($_SESSION['zeit'] ?? 0) > time() - 12 * 3600;
@@ -87,7 +113,7 @@ $e = $_SERVER['REQUEST_METHOD'] === 'POST'
 
 // ── Anmeldung ──
 if ($aktion === 'status') {
-    antwort(200, ['ok' => true, 'eingerichtet' => is_file(pfad('zugang.json')), 'angemeldet' => eingeloggt()]);
+    antwort(200, ['ok' => true, 'eingerichtet' => is_file(pfad('zugang.json')), 'angemeldet' => eingeloggt(), 'passkey' => count(lesen('passkeys.json', [])) > 0]);
 }
 
 if ($aktion === 'einrichten') {
@@ -108,6 +134,40 @@ if ($aktion === 'login') {
         $fehl[] = time();
         schreiben('fehlversuche.json', $fehl);
         antwort(401, ['ok' => false, 'error' => 'Passwort falsch']);
+    }
+    schreiben('fehlversuche.json', []);
+    session_regenerate_id(true);
+    $_SESSION['ok'] = true; $_SESSION['zeit'] = time();
+    antwort(200, ['ok' => true]);
+}
+
+// ── Passkey (Face ID / Touch ID) per WebAuthn ──
+if ($aktion === 'passkey_start') {
+    $_SESSION['pk_challenge'] = b64url(random_bytes(32)); $_SESSION['pk_zeit'] = time();
+    antwort(200, ['ok' => true, 'challenge' => $_SESSION['pk_challenge'], 'rpId' => rpId(), 'ids' => array_column(lesen('passkeys.json', []), 'id')]);
+}
+
+if ($aktion === 'passkey_login') {
+    $fehl = array_values(array_filter(lesen('fehlversuche.json', []), fn($t) => $t > time() - 900));
+    if (count($fehl) >= MAX_FEHLVERSUCHE) antwort(429, ['ok' => false, 'error' => 'Zu viele Versuche. Bitte 15 Minuten warten.']);
+    $keys = lesen('passkeys.json', []);
+    $i = array_search((string) ($e['id'] ?? ''), array_column($keys, 'id'), true);
+    $ad = b64urlDecode((string) ($e['authenticatorData'] ?? ''));
+    $cdj = b64urlDecode((string) ($e['clientDataJSON'] ?? ''));
+    $ok = $i !== false && clientDataOk($cdj, 'webauthn.get') && strlen($ad) >= 37
+        && hash_equals(hash('sha256', rpId(), true), substr($ad, 0, 32))
+        && (ord($ad[32]) & 0x05) === 0x05  // Nutzer anwesend und per Face ID/PIN bestätigt
+        && openssl_verify($ad . hash('sha256', $cdj, true), b64urlDecode((string) ($e['signature'] ?? '')), $keys[$i]['pem'], OPENSSL_ALGO_SHA256) === 1;
+    if ($ok) {
+        $zaehler = unpack('N', substr($ad, 33, 4))[1];
+        if ($zaehler > 0 && $zaehler <= (int) ($keys[$i]['zaehler'] ?? 0)) $ok = false;  // geklonter Schlüssel
+        else { $keys[$i]['zaehler'] = $zaehler; $keys[$i]['zuletzt'] = date('c'); schreiben('passkeys.json', $keys); }
+    }
+    unset($_SESSION['pk_challenge']);
+    if (!$ok) {
+        $fehl[] = time();
+        schreiben('fehlversuche.json', $fehl);
+        antwort(403, ['ok' => false, 'error' => 'Face ID hat nicht geklappt. Bitte mit Passwort anmelden.']);
     }
     schreiben('fehlversuche.json', []);
     session_regenerate_id(true);
@@ -206,6 +266,38 @@ if ($aktion === 'speichern') {
     $idx[] = $eintrag;
     schreiben('index.json', $idx);
     antwort(200, ['ok' => true, 'gesendet' => $versand, 'lexware' => $lex]);
+}
+
+// ── Passkeys verwalten (nur angemeldet) ──
+if ($aktion === 'passkey_reg_start') {
+    $_SESSION['pk_challenge'] = b64url(random_bytes(32)); $_SESSION['pk_zeit'] = time();
+    $z = lesen('zugang.json', []);
+    if (empty($z['nutzerId'])) { $z['nutzerId'] = b64url(random_bytes(16)); schreiben('zugang.json', $z); }
+    antwort(200, ['ok' => true, 'challenge' => $_SESSION['pk_challenge'], 'rpId' => rpId(), 'userId' => $z['nutzerId'], 'ids' => array_column(lesen('passkeys.json', []), 'id')]);
+}
+
+if ($aktion === 'passkey_reg') {
+    $id = (string) ($e['id'] ?? '');
+    $cdj = b64urlDecode((string) ($e['clientDataJSON'] ?? ''));
+    $der = b64urlDecode((string) ($e['publicKey'] ?? ''));
+    $pem = "-----BEGIN PUBLIC KEY-----\n" . chunk_split(base64_encode($der), 64, "\n") . "-----END PUBLIC KEY-----\n";
+    if (!preg_match('/^[A-Za-z0-9_-]{16,700}$/', $id) || !clientDataOk($cdj, 'webauthn.create') || !in_array((int) ($e['alg'] ?? 0), [-7, -257], true) || !openssl_pkey_get_public($pem)) {
+        antwort(422, ['ok' => false, 'error' => 'Face ID konnte nicht eingerichtet werden.']);
+    }
+    unset($_SESSION['pk_challenge']);
+    $keys = array_values(array_filter(lesen('passkeys.json', []), fn($k) => $k['id'] !== $id));
+    $keys[] = ['id' => $id, 'pem' => $pem, 'alg' => (int) $e['alg'], 'name' => mb_substr((string) ($e['name'] ?? 'Gerät'), 0, 40), 'erstellt' => date('c'), 'zaehler' => 0];
+    schreiben('passkeys.json', $keys);
+    antwort(200, ['ok' => true]);
+}
+
+if ($aktion === 'passkey_liste') {
+    antwort(200, ['ok' => true, 'passkeys' => array_map(fn($k) => ['id' => $k['id'], 'name' => $k['name'], 'erstellt' => $k['erstellt'], 'zuletzt' => $k['zuletzt'] ?? null], lesen('passkeys.json', []))]);
+}
+
+if ($aktion === 'passkey_loeschen') {
+    schreiben('passkeys.json', array_values(array_filter(lesen('passkeys.json', []), fn($k) => $k['id'] !== (string) ($e['id'] ?? ''))));
+    antwort(200, ['ok' => true]);
 }
 
 // ── Lexware Office ──

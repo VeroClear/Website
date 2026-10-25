@@ -34,6 +34,7 @@
     archiv: svg('<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>'),
     preise: svg('<path d="M20.6 13.4 13.4 20.6a2 2 0 0 1-2.8 0L3 13V3h10l7.6 7.6a2 2 0 0 1 0 2.8z"/><circle cx="7.5" cy="7.5" r="1.5"/>'),
     pfeil: svg('<path d="M5 12h14M13 6l6 6-6 6"/>'),
+    faceid: svg('<path d="M4 8V6a2 2 0 0 1 2-2h2M16 4h2a2 2 0 0 1 2 2v2M20 16v2a2 2 0 0 1-2 2h-2M8 20H6a2 2 0 0 1-2-2v-2M9 9v1M15 9v1M12 9v4h-1M9 15.5a4 4 0 0 0 6 0"/>'),
     muell: svg('<path d="M3 6h18M8 6V4h8v2M6 6l1 14a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-14M10 11v6M14 11v6"/>'),
   };
   const TABS = [['home', 'Start'], ['besichtigung', 'Angebot', 'angebot'], ['rechnung', 'Rechnung'], ['uebergabe', 'Übergabe'], ['archiv', 'Archiv']];
@@ -48,6 +49,35 @@
   // Regelbesteuerung: Preise netto + 19 % USt, Vorsteuer auf Entsorgung wird erstattet
   const mitUstStandard = () => ((PREISE && PREISE.firma) || {}).ustModus !== 'klein';
   const plusTage = t => { const d = new Date(); d.setDate(d.getDate() + t); return d.toLocaleDateString('de-DE'); };
+
+  // Passkey-Hilfen: ArrayBuffer ↔ base64url
+  const b64 = buf => btoa(String.fromCharCode(...new Uint8Array(buf))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  const unb64 = s => Uint8Array.from(atob(s.replace(/-/g, '+').replace(/_/g, '/') + '==='.slice((s.length + 3) % 4)), c => c.charCodeAt(0));
+  const kannPasskey = () => !!(window.PublicKeyCredential && navigator.credentials);
+  const geraet = () => /iPhone/.test(navigator.userAgent) ? 'iPhone' : /iPad/.test(navigator.userAgent) ? 'iPad' : /Mac/.test(navigator.userAgent) ? 'Mac' : /Android/.test(navigator.userAgent) ? 'Android' : 'Gerät';
+  let HAT_PASSKEY = false;
+
+  async function passkeyEinrichten() {
+    const o = await api('passkey_reg_start', {});
+    const cred = await navigator.credentials.create({ publicKey: {
+      challenge: unb64(o.challenge), rp: { id: o.rpId, name: 'VeroClear App' },
+      user: { id: unb64(o.userId), name: 'luca', displayName: 'Luca De Caro' },
+      pubKeyCredParams: [{ type: 'public-key', alg: -7 }, { type: 'public-key', alg: -257 }],
+      authenticatorSelection: { residentKey: 'preferred', userVerification: 'required' },
+      excludeCredentials: o.ids.map(id => ({ type: 'public-key', id: unb64(id) })), attestation: 'none', timeout: 60000 } });
+    const pk = cred.response.getPublicKey && cred.response.getPublicKey();
+    if (!pk) throw new Error('Dieser Browser unterstützt Face ID für Websites noch nicht. Bitte Safari oder Chrome aktualisieren.');
+    await api('passkey_reg', { id: b64(cred.rawId), clientDataJSON: b64(cred.response.clientDataJSON), publicKey: b64(pk), alg: cred.response.getPublicKeyAlgorithm(), name: geraet() });
+    HAT_PASSKEY = true;
+  }
+
+  async function passkeyLogin() {
+    const o = await api('passkey_start', {});
+    const cred = await navigator.credentials.get({ publicKey: { challenge: unb64(o.challenge), rpId: o.rpId, userVerification: 'required', timeout: 60000,
+      allowCredentials: o.ids.map(id => ({ type: 'public-key', id: unb64(id) })) } });
+    await api('passkey_login', { id: b64(cred.rawId), clientDataJSON: b64(cred.response.clientDataJSON), authenticatorData: b64(cred.response.authenticatorData), signature: b64(cred.response.signature) });
+  }
+  const passkeyFehler = e => e && e.name === 'NotAllowedError' ? 'Abgebrochen.' : (e && e.message) || 'Face ID hat nicht geklappt.';
 
   async function api(a, body) {
     const opt = { credentials: 'same-origin', headers: { 'X-VeroClear': 'app' } };
@@ -81,13 +111,23 @@
     document.getElementById('logout').hidden = true; $tabs.hidden = true;
     let s;
     try { s = await api('status'); } catch (e) { seite(`<p class="err">${esc(e.message)}</p>`); return; }
+    HAT_PASSKEY = !!s.passkey;
     if (s.angemeldet) return home();
     const neu = !s.eingerichtet;
+    const mitFaceId = !neu && s.passkey && kannPasskey();
     seite(`<h1>${neu ? 'App einrichten' : 'Anmelden'}</h1><div class="card">
       ${neu ? '<p>Lege jetzt dein Passwort für die App fest (mindestens 10 Zeichen). Es wird nur verschlüsselt auf deinem Server gespeichert.</p>' : ''}
       <label>Passwort<input type="password" id="pw" autocomplete="${neu ? 'new-password' : 'current-password'}"></label>
       ${neu ? '<label style="margin-top:10px">Passwort wiederholen<input type="password" id="pw2" autocomplete="new-password"></label>' : ''}
-      <div id="msg"></div><p></p><button class="btn" id="go">${neu ? 'Passwort festlegen' : 'Anmelden'}</button></div>`);
+      <div id="msg"></div><p></p><button class="btn${mitFaceId ? ' sec' : ''}" id="go">${neu ? 'Passwort festlegen' : 'Mit Passwort anmelden'}</button></div>`);
+    if (mitFaceId) {
+      const karte = document.createElement('div'); karte.className = 'card'; karte.style.textAlign = 'center';
+      karte.innerHTML = `<button class="btn" id="faceid">${ICON.faceid} Mit Face ID anmelden</button><div id="fmsg"></div>`;
+      $main.querySelector('h1').after(karte);
+      const los = async auto => { try { await passkeyLogin(); home(); } catch (e) { if (!auto) document.getElementById('fmsg').innerHTML = `<p class="err">${esc(passkeyFehler(e))}</p>`; } };
+      document.getElementById('faceid').onclick = () => los(false);
+      los(true);  // direkt anbieten wie bei einer App; manche Browser erlauben das erst nach einem Tipp, dann bleibt der Knopf
+    }
     const go = async () => {
       const pw = document.getElementById('pw').value;
       const msg = document.getElementById('msg');
@@ -114,10 +154,17 @@
         ${kachel('rechnung', 'Rechnung', 'Aus Angebot oder neu')}
         ${kachel('uebergabe', 'Übergabe', 'Protokoll mit Unterschrift')}
         <button class="tile zeile" data-go="preise"><span class="ico">${ICON.preise}</span><span>Preise & Firma<small>Preise, Entsorgung, Bankdaten, Umsatzsteuer</small></span><span class="pfeil">${ICON.pfeil}</span></button></div>
+      ${!HAT_PASSKEY && kannPasskey() ? `<div class="card" id="fidbanner" style="display:flex;align-items:center;gap:14px"><span class="ico" style="width:44px;height:44px;border-radius:12px;display:grid;place-items:center;background:var(--accent-soft);color:var(--accent);flex:none">${ICON.faceid}</span><span style="flex:1"><b>Schneller anmelden</b><br><span class="note">Mit Face ID statt Passwort</span></span><button class="btn small" id="fidok">Einrichten</button></div>` : ''}
       <div class="abschnitt"><h2>Dieser Monat</h2></div>
       <div class="stats"><div class="stat"><b>${anz('Angebot')}</b><span>Angebote</span></div><div class="stat"><b>${anz('Rechnung')}</b><span>Rechnungen</span></div><div class="stat"><b>${Math.round(umsatz).toLocaleString('de-DE')} €</b><span>Umsatz</span></div></div>
       <div class="abschnitt"><h2>Zuletzt</h2>${liste.length ? '<button data-go="archiv">Alle ansehen</button>' : ''}</div>
       <div class="card list" style="padding:0">${liste.length ? liste.slice(0, 5).map(eintrag).join('') : '<p class="leer">Noch nichts erstellt. Starte mit einer Besichtigung.</p>'}</div>`);
+    const fid = document.getElementById('fidok');
+    if (fid) fid.onclick = async () => {
+      const b = document.getElementById('fidbanner');
+      try { await passkeyEinrichten(); b.innerHTML = `<p class="ok" style="margin:0;flex:1">Face ID ist eingerichtet. Beim nächsten Mal reicht ein Blick.</p>`; }
+      catch (e) { b.insertAdjacentHTML('afterend', `<p class="err">${esc(passkeyFehler(e))}</p>`); }
+    };
   }
 
   // ── Preisliste ──
@@ -135,9 +182,10 @@
         <label class="breit">Umsatzsteuer auf Rechnungen<select data-f="ustModus"><option value="regel"${(PREISE.firma || {}).ustModus !== 'klein' ? ' selected' : ''}>zzgl. 19 % Umsatzsteuer (Standard)</option><option value="klein"${(PREISE.firma || {}).ustModus === 'klein' ? ' selected' : ''}>Kleinunternehmer (§ 19 UStG) – keine Umsatzsteuer</option></select></label></div>
         <p class="note">Die Steuernummer bekommst du vom Finanzamt nach der Anmeldung. Ohne Steuernummer ist eine Rechnung nicht vollständig.</p>
         <p class="note">Mit 19 % Umsatzsteuer kreuzt du im Fragebogen zur steuerlichen Erfassung „Verzicht auf die Kleinunternehmerregelung“ an. Dann bekommst du auch die Umsatzsteuer auf Entsorgung, Transporter und Material vom Finanzamt zurück (Vorsteuer).</p></div>
+      <div class="card"><h2>Anmeldung mit Face ID</h2><div id="pkbox"><p class="note">Lädt …</p></div></div>
       <div class="card"><h2>Lexware Office</h2><div id="lexbox"><p class="note">Lädt …</p></div></div>
       <div id="msg"></div><button class="btn" id="save">Speichern</button>`);
-    lexwareKarte();
+    lexwareKarte(); passkeyKarte();
     document.getElementById('save').onclick = async () => {
       const neu = { ab: {}, kalkulation: {}, entsorgung: {}, dichte: {}, firma: {} };
       document.querySelectorAll('[data-g]').forEach(i => { neu[i.dataset.g][i.dataset.k] = num(i.value); });
@@ -145,6 +193,21 @@
       const msg = document.getElementById('msg');
       try { PREISE = (await api('preise_speichern', neu)).preise; msg.innerHTML = '<p class="ok">Gespeichert.</p>'; }
       catch (e) { msg.innerHTML = `<p class="err">${esc(e.message)}</p>`; }
+    };
+  }
+
+  async function passkeyKarte() {
+    const box = document.getElementById('pkbox'); if (!box) return;
+    let l = [];
+    try { l = (await api('passkey_liste')).passkeys; } catch (e) { box.innerHTML = `<p class="err">${esc(e.message)}</p>`; return; }
+    HAT_PASSKEY = l.length > 0;
+    box.innerHTML = (l.length ? `<div class="list" style="margin:-4px 0 10px">${l.map(k => `<div class="zeile"><span class="eintrag" style="padding-left:0"><span class="chip R">${ICON.faceid}</span><span class="mitte"><span class="titel" style="display:block">${esc(k.name)}</span><span class="meta" style="display:block">eingerichtet ${new Date(k.erstellt).toLocaleDateString('de-DE')}${k.zuletzt ? ' · zuletzt ' + new Date(k.zuletzt).toLocaleDateString('de-DE') : ''}</span></span></span><button class="del" data-pk="${esc(k.id)}" aria-label="Entfernen">${ICON.muell}</button></div>`).join('')}</div>`
+      : '<p class="note" style="margin-top:0">Noch kein Gerät eingerichtet. Danach meldest du dich mit Face ID (oder Touch ID) an – das Passwort bleibt als Ersatz.</p>')
+      + (kannPasskey() ? `<button class="btn small" id="pkneu">${ICON.faceid} ${l.length ? 'Weiteres Gerät einrichten' : 'Face ID auf diesem Gerät einrichten'}</button>` : '<p class="note">Dieser Browser unterstützt kein Face ID für Websites.</p>') + '<div id="pkmsg"></div>';
+    box.onclick = async e => {
+      const d = e.target.closest('[data-pk]');
+      if (d && confirm('Face ID für dieses Gerät entfernen?')) { await api('passkey_loeschen', { id: d.dataset.pk }); passkeyKarte(); }
+      if (e.target.closest('#pkneu')) { try { await passkeyEinrichten(); passkeyKarte(); } catch (x) { document.getElementById('pkmsg').innerHTML = `<p class="err">${esc(passkeyFehler(x))}</p>`; } }
     };
   }
 
